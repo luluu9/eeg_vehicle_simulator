@@ -2,6 +2,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QSlider, QCheckBox, QGroupBox, QScrollArea, QDoubleSpinBox, QComboBox)
 from PyQt6.QtCore import Qt, pyqtSlot, QTimer
 import pyqtgraph as pg
+import numpy as np
 from ..core.engine import PredictorEngine
 from ..core.classifiers import MockClassifier, CSPSVMClassifier
 from ...common.constants import LSLChannel
@@ -70,7 +71,8 @@ class ClassifierWidget(QGroupBox):
         
         # Data storage for history
         self.history_data = {name: [] for name in LSLChannel.names()}
-        self.max_history = 100
+        self.visible_history = 100
+        self.buffer_size = 500
         
     def toggle_active(self, checked):
         # We need to expose this in engine
@@ -86,12 +88,30 @@ class ClassifierWidget(QGroupBox):
     def update_viz(self, probs):
         self.bar_items.setOpts(height=probs)
         
-        # Update History
+        # Update History Buffer
         for i, name in enumerate(LSLChannel.names()):
             self.history_data[name].append(probs[i])
-            if len(self.history_data[name]) > self.max_history:
+            if len(self.history_data[name]) > self.buffer_size:
                 self.history_data[name].pop(0)
-            self.lines[name].setData(self.history_data[name])
+        
+        self._refresh_lines()
+
+    def set_history_length(self, length: int):
+        self.visible_history = length
+        self._refresh_lines()
+        
+    def _refresh_lines(self):
+        for name in LSLChannel.names():
+            data = self.history_data[name]
+            # Show only last N points
+            if len(data) > self.visible_history:
+                vis_data = data[-self.visible_history:]
+            else:
+                vis_data = data
+                
+            # X axis: Right (0) to Left (Negative)
+            x = np.arange(-len(vis_data) + 1, 1)
+            self.lines[name].setData(x, vis_data)
 
 class PredictorWindow(QMainWindow):
     def __init__(self):
@@ -119,13 +139,14 @@ class PredictorWindow(QMainWindow):
         
         # Stream Selection
         top_bar.addWidget(QLabel("Input Stream:"))
-        self.stream_combo = QComboBox()
-        self.stream_combo.setMinimumWidth(200)
-        top_bar.addWidget(self.stream_combo)
         
         self.refresh_btn = QPushButton("Refresh")
         self.refresh_btn.clicked.connect(self.refresh_streams)
         top_bar.addWidget(self.refresh_btn)
+
+        self.stream_combo = QComboBox()
+        self.stream_combo.setMinimumWidth(200)
+        top_bar.addWidget(self.stream_combo)
         
         self.start_btn = QPushButton("Connect")
         self.start_btn.clicked.connect(self.toggle_start)
@@ -138,6 +159,16 @@ class PredictorWindow(QMainWindow):
         self.interval_spin.setValue(2.0)
         self.interval_spin.valueChanged.connect(self.engine.set_interval)
         top_bar.addWidget(self.interval_spin)
+
+        top_bar.addWidget(QLabel("History (10-200):"))
+        self.history_slider = QSlider(Qt.Orientation.Horizontal)
+        self.history_slider.setRange(10, 200)
+        self.history_slider.setValue(100)
+        self.history_slider.setFixedWidth(190)
+        self.history_slider.setTickInterval(10)
+        self.history_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.history_slider.valueChanged.connect(self.update_history_length)
+        top_bar.addWidget(self.history_slider)
         
         main_layout.addLayout(top_bar)
         
@@ -158,7 +189,11 @@ class PredictorWindow(QMainWindow):
         widget = ClassifierWidget(clf.name, clf.min_window, clf.max_window, self.engine)
         self.container_layout.addWidget(widget)
         self.widgets[clf.name] = widget
-        
+    
+    def update_history_length(self, val):
+        for w in self.widgets.values():
+            w.set_history_length(val)
+
     def refresh_streams(self):
         streams = self.engine.find_streams()
         current_text = self.stream_combo.currentText()
