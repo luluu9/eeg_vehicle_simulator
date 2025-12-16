@@ -74,11 +74,19 @@ class CSPSVMClassifier(BaseClassifier):
         return "CSP+SVM"
 
     def predict_proba(self, data: np.ndarray, fs: float) -> np.ndarray:
+        # Prepare for prediction (1, ch, time)
         X = data[np.newaxis, :, :] 
         
         try:
             probs = self.model.predict_proba(X)[0] 
-            return probs
+            classes = self.model.classes_ # e.g. [1, 2] or [2, 3, 4, 5], where 1=Relax, 2=Left, etc.
+            
+            # Map to standard vector of size 5 even if the model has different number of classes
+            # classes-1 because the classes are 1-based, and we want 0-based indexing
+            full_probs = np.zeros(5)
+            full_probs[classes-1] = probs
+            
+            return full_probs
             
         except Exception as e:
             print(f"Prediction error: {e}")

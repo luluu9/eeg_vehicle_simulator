@@ -101,6 +101,7 @@ class PredictorEngine(QObject):
                 
             needed_samples = int(state.target_window * proc_fs)
             if n_proc_samples < needed_samples:
+                print(f"Not enough data for {name}, skipping")
                 continue
                 
             input_slice = processed_data[:, -needed_samples:]

@@ -135,7 +135,7 @@ class PredictorWindow(QMainWindow):
         self.interval_spin = QDoubleSpinBox()
         self.interval_spin.setRange(0.1, 5.0)
         self.interval_spin.setSingleStep(0.1)
-        self.interval_spin.setValue(0.5)
+        self.interval_spin.setValue(2.0)
         self.interval_spin.valueChanged.connect(self.engine.set_interval)
         top_bar.addWidget(self.interval_spin)
         
