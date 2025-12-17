@@ -1,41 +1,23 @@
 # EEG Vehicle Simulator
 
-## Overview
-This project runs a Gymnasium simulator controlled by EEG segments selected using keyboard input.
+This project implements a modular, LSL-based system for controlling a vehicle simulator using EEG signals. It is architected as two independent applications—a **Predictor** and a **Simulator** communicating via Lab Streaming Layer (LSL).
 
-## How it works
-1. You press an arrow key.
-2. The key is mapped to an action class (Left / Right / Both / Feet / Relax).
-3. A random EEG segment from the matching class is selected.
-4. Features are computed from the segment.
-5. A CSP + SVM (RBF kernel) model predicts the class.
-6. The predicted class is converted to the simulator action vector: `[steer, gas, brake]`.
-7. The action vector is sent to the Gymnasium environment.
+## Architecture
 
-## Controls
-- Left Arrow: Left
-- Right Arrow: Right
-- Up Arrow: Both
-- Down Arrow: Feet
+The system is decoupled to allow flexible testing, model comparison, and distributed processing.
 
-## EEG classes
-- 1: Relax
-- 2: Left hand
-- 3: Right hand
-- 4: Both hands
-- 5: Both Feet
+**Data Flow:**
+1.  **EEG Source**: `eeg_collector` (Replayer or Live Amp) streams raw EEG data via LSL.
+2.  **Predictor App**:
+    *   Connects to the raw EEG stream.
+    *   Preprocesses data (Bandpass 8-32Hz, Notch 50Hz, Resampling).
+    *   Runs multiple classifiers in parallel (e.g., CSP+SVM, Ground Truth).
+    *   Broadcasts probability vectors (`[Relax, Left, Right, Both, Feet]`) to unique LSL streams.
+3.  **Simulator App**:
+    *   Listens to *all* available classifier LSL streams.
+    *   Applies a Control Strategy (e.g., Threshold, Accumulator) to map probabilities to car actions (`steer`, `gas`, `brake`).
+    *   Renders the simulation (CarRacing) and a Debug HUD.
 
-## Files
-- `simulator.py` : main file, runs the simulator
-- `model.joblib` : trained CSP + SVM (RBF) model
-- `tools.py` : `split_epochs_into_segments`, `get_freq`
-- 
-
-## Requirements
-- Python 3.11
-- numpy
-- mne
-- joblib
-- gymnasium
-- scikit-learn
-
+### Prerequisites
+*   Python 3.10+
+*   Dependencies: `numpy`, `scipy`, `pylsl`, `pyqt6`, `pyqtgraph`, `gymnasium[box2d]`, `pygame`, `joblib`, `mne` (requirements.txt)
