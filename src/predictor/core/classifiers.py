@@ -145,23 +145,29 @@ class CSPSVMClassifier(BaseClassifier):
             return np.zeros(5)
 
 class GroundTruthClassifier(BaseClassifier):
-    def __init__(self, target_stream_name: str = "test-player"):
+    def __init__(self):
         super().__init__()
         self._name = "Ground Truth"
-        self._target = target_stream_name
-        
-        # Determine annotation stream name
-        # User says: original name + "-annotations"
-        self.annot_stream_name = f"{self._target}-annotations"
-        
         self.latest_label_idx = 0 # Default Relax
-        self.running = True
-        self.thread = threading.Thread(target=self._listen_loop, daemon=True)
-        self.thread.start()
+        self.running = False
         
     @property
     def name(self):
         return self._name
+
+    def start(self, target_stream_name: str = "test-player"):
+        if (self.running):
+            print("GroundTruth: Already running, restarting...")
+            self.stop()
+        self.annot_stream_name = f"{target_stream_name}-annotations"
+        self.running = True
+        self.thread = threading.Thread(target=self._listen_loop, daemon=True)
+        self.thread.start()    
+    
+    def stop(self):
+        self.running = False
+        if self.thread:
+            self.thread.join()
 
     def _listen_loop(self):
         target = None
@@ -182,11 +188,7 @@ class GroundTruthClassifier(BaseClassifier):
                 else:
                     print(f"GroundTruth: Failed to find stream {self.annot_stream_name} after {max_retries} attempts. Exiting listener.")
                     return
-        
-        if not self.running: # If loop exited because self.running became False
-            print("GroundTruth: Listener stopped before finding stream.")
-            return
-            
+
         print(f"GroundTruth: Connected to {target.name()} ({target.type()})")
         inlet = StreamInlet(target, processing_flags=proc_clocksync)
         

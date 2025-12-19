@@ -138,6 +138,7 @@ class PredictorWindow(QMainWindow):
         self.engine.error_occurred.connect(self.on_error)
         
         self.widgets = {} # name -> ClassifierWidget
+        self.ground_truth_classifier = None
         
         self.init_ui()
         self.load_defaults()
@@ -196,7 +197,8 @@ class PredictorWindow(QMainWindow):
         main_layout.addWidget(scroll)
         
     def load_defaults(self):
-        self.add_classifier_ui(GroundTruthClassifier())
+        self.ground_truth_classifier = GroundTruthClassifier()
+        self.add_classifier_ui(self.ground_truth_classifier)
         
     def add_classifier_ui(self, clf):
         self.engine.add_classifier(clf)
@@ -235,6 +237,8 @@ class PredictorWindow(QMainWindow):
                 self.start_btn.setStyleSheet("background-color: #ffcccc")
                 self.stream_combo.setEnabled(False)
                 self.refresh_btn.setEnabled(False)
+                if self.ground_truth_classifier:
+                    self.ground_truth_classifier.start(target.name())
             else:
                 self.start_btn.setText("Retry Connect")
         else:
