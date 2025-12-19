@@ -38,6 +38,11 @@ class ClassifierWidget(QGroupBox):
         
         self.win_label = QLabel(f"{self.min_w:.2f}s")
         ctrl_layout.addWidget(self.win_label)
+
+        # Latency Label
+        self.latency_label = QLabel("Lag: --")
+        self.latency_label.setStyleSheet("color: gray")
+        ctrl_layout.addWidget(self.latency_label)
         
         layout.addLayout(ctrl_layout)
         
@@ -84,9 +89,18 @@ class ClassifierWidget(QGroupBox):
         self.win_label.setText(f"{sec:.2f}s")
         self.engine.set_classifier_window(self.name, sec)
         
-    @pyqtSlot(list) # expects normalized probabilities list
-    def update_viz(self, probs):
+    @pyqtSlot(list, float) # expects normalized probabilities list, latency
+    def update_viz(self, probs, latency):
         self.bar_items.setOpts(height=probs)
+        
+        # Update Latency
+        self.latency_label.setText(f"Lag: {latency*1000:.0f}ms")
+        if latency > 0.5:
+             self.latency_label.setStyleSheet("color: red; font-weight: bold")
+        elif latency > 0.1:
+             self.latency_label.setStyleSheet("color: orange")
+        else:
+             self.latency_label.setStyleSheet("color: green")
         
         # Update History Buffer
         for i, name in enumerate(LSLChannel.names()):
@@ -230,10 +244,10 @@ class PredictorWindow(QMainWindow):
             self.stream_combo.setEnabled(True)
             self.refresh_btn.setEnabled(True)
             
-    @pyqtSlot(str, object) # object=np.ndarray
-    def on_prediction(self, name, probs):
+    @pyqtSlot(str, object, float) # object=np.ndarray
+    def on_prediction(self, name, probs, latency):
         if name in self.widgets:
-            self.widgets[name].update_viz(probs)
+            self.widgets[name].update_viz(probs, latency)
             
     @pyqtSlot(str)
     def on_error(self, msg):

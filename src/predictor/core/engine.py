@@ -1,4 +1,5 @@
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
+from pylsl import local_clock
 from .lsl_io import DataHandler, PredictionBroadcaster
 from .classifiers import BaseClassifier
 from .preprocessor import EEGPreprocessor
@@ -16,7 +17,7 @@ class ClassifierState:
 
 class PredictorEngine(QObject):
     # Signals
-    prediction_made = pyqtSignal(str, np.ndarray) # clf_name, probs
+    prediction_made = pyqtSignal(str, np.ndarray, float) # clf_name, probs, latency
     error_occurred = pyqtSignal(str)
     
     def __init__(self):
@@ -81,7 +82,7 @@ class PredictorEngine(QObject):
             
         # Get 5x data samples for preprocessing
         max_req *= 5
-        data, _ = self.data_handler.get_latest_window(max_req)
+        data, timestamps = self.data_handler.get_latest_window(max_req)
         
         if data is None:
             return
@@ -109,7 +110,20 @@ class PredictorEngine(QObject):
             try:
                 probs = state.classifier.predict_proba(input_slice, proc_fs)
                 state.broadcaster.push_prediction(probs)
-                self.prediction_made.emit(name, probs)
+                
+                # Calculate latency (freshness of data)
+                # timestamps corresponds to data. Since we slice processed_data, assume linear time.
+                # The end of the processed window corresponds to the end of the raw window.
+                # So we can just take the last timestamp from the raw data timestamps.
+                # (Assuming get_latest_window returns timestamps corresponding to 'data')
+                
+                latency = 0.0
+                if timestamps is not None and len(timestamps) > 0:
+                    last_ts = timestamps[-1]
+                    now = local_clock()
+                    latency = now - last_ts
+                
+                self.prediction_made.emit(name, probs, latency)
                 
             except Exception as e:
                 print(f"Error in {name}: {e}")

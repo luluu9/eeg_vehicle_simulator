@@ -1,7 +1,7 @@
 import time
 import threading
 import numpy as np
-from pylsl import StreamInlet, StreamOutlet, StreamInfo, resolve_streams
+from pylsl import StreamInlet, StreamOutlet, StreamInfo, resolve_streams, proc_clocksync
 from collections import deque
 from ...common.constants import LSLConfig
 
@@ -22,7 +22,7 @@ class DataHandler:
         return resolve_streams()
         
     def connect(self, stream_info):
-        self.inlet = StreamInlet(stream_info)
+        self.inlet = StreamInlet(stream_info, processing_flags=proc_clocksync)
         self.srate = self.inlet.info().nominal_srate()
         self.n_channels = self.inlet.info().channel_count()
         print(f"Connected to {self.inlet.info().name()} ({self.n_channels} ch @ {self.srate} Hz)")
@@ -89,9 +89,10 @@ class DataHandler:
         full_data = np.concatenate(self._data_chunks, axis=1) # (ch, all_samples)
         
         if full_data.shape[1] > required_samples:
-            return full_data[:, -required_samples:], None # Timestamps ignored for now
+            full_ts = np.array(self._timestamps)
+            return full_data[:, -required_samples:], full_ts[-required_samples:]
         else:
-            return full_data, None
+            return full_data, np.array(self._timestamps)
 
 class PredictionBroadcaster:
     def __init__(self, model_name: str):
