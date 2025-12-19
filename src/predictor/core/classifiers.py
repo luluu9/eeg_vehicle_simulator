@@ -4,6 +4,14 @@ import numpy as np
 import time
 import threading
 from pylsl import resolve_streams, StreamInlet, local_clock, proc_clocksync
+import src.predictor.core.tools as tools
+
+from sklearn.pipeline import make_pipeline
+from sklearn.svm import SVC
+from sklearn.multiclass import OneVsRestClassifier
+from sklearn.model_selection import StratifiedKFold, cross_val_score
+from mne.decoding import CSP
+from pathlib import Path
 
 class BaseClassifier(ABC):
     def __init__(self):
@@ -74,9 +82,47 @@ class CSPSVMClassifier(BaseClassifier):
     def name(self):
         return "CSP+SVM"
 
+    def train(self):
+        current_file = Path(__file__).resolve()
+        project_root = current_file.parents[4]
+        data_dir = project_root / "data"
+        models_dir = current_file.parents[1] / "models"
+        
+        training_data = [
+            'mati_imagery_1_run1_20251207_183302_raw.fif',
+            'mati_imagery_2_run1_20251207_190808_raw.fif',
+            'mati_imagery_3_real_classifier_run1_20251207_204045_raw.fif',
+            'mati_imagery_4_real_classifier_run1_20251207_210156_raw.fif',
+            'mati_imagery2_run1_20251211_211512_raw.fif',
+            'mati_imagery2_run2_20251211_205846_raw.fif',
+            'mati_imagery3_run1_20251217_204245_raw.fif',
+            #'mati_imagery3_run2_20251217_212624_raw.fif'
+        ]
+        training_data = [data_dir / data_path for data_path in training_data]
+        target_events = ["relax", "left_hand", "right_hand", "both_hands", "both_feets"]
+
+        epoch_segment = 2.0
+        epoch_step = 1.0
+        epochs = tools.split_annotated_into_segments(training_data, epoch_segment, epoch_step)
+        epochs = epochs[target_events]
+
+        csp = CSP(n_components=4, reg=None, log=True, norm_trace=False)
+        svm = OneVsRestClassifier(SVC(kernel='rbf', probability=True))
+        clf = make_pipeline(csp, svm)
+        
+        X = epochs.get_data(copy=True)
+        y = epochs.events[:, -1]
+
+        cv = StratifiedKFold(n_splits=10, shuffle=True, random_state=42)
+        cv_scores = cross_val_score(clf, X, y, cv=cv)
+        print(f"CV Accuracy: {np.mean(cv_scores):.4f} +/- {np.std(cv_scores):.4f}")
+
+        clf.fit(X, y)
+        joblib.dump(clf, models_dir / "csp_svm.joblib")
+
     def predict_proba(self, data: np.ndarray, fs: float) -> np.ndarray:
         # Check magnitude of data and if it's too big, scale it down
-        if np.max(np.abs(data)) > 1e-6:
+        if np.max(np.abs(data)) > 1e-3:
             data = data * 1e-6
         
         # Prepare for prediction (1, ch, time)
