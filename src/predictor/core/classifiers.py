@@ -13,6 +13,9 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score
 from mne.decoding import CSP
 from pathlib import Path
 
+from pyriemann.estimation import Covariances
+from pyriemann.tangentspace import TangentSpace
+
 class BaseClassifier(ABC):
     def __init__(self):
         self._min_window = 1.0 # Default
@@ -121,7 +124,7 @@ class CSPSVMClassifier(BaseClassifier):
         joblib.dump(clf, models_dir / "csp_svm.joblib")
 
     def predict_proba(self, data: np.ndarray, fs: float) -> np.ndarray:
-        # Check magnitude of data and if it's too big, scale it down
+        # Set proper magnitude of data
         if np.max(np.abs(data)) > 1e-3:
             data = data * 1e-6
         
@@ -218,3 +221,78 @@ class GroundTruthClassifier(BaseClassifier):
         else:
             print(f"GroundTruth: Invalid label index: {self.latest_label_idx}")
         return probs
+
+class TGSPClassifier(BaseClassifier):
+    def __init__(self, model_path: str):
+        super().__init__()
+        self.model_path = model_path
+        self._min_window = 2.0
+        self._max_window = 5.0
+        
+        try:
+            self.model = joblib.load(self.model_path)
+            print(f"Loaded model: {model_path}")
+        except Exception as e:
+            print(f"Failed to load model {model_path}: {e}")
+            raise
+
+    @property
+    def name(self):
+        return "TGSP"
+
+    def train(self):
+        current_file = Path(__file__).resolve()
+        project_root = current_file.parents[4]
+        data_dir = project_root / "data"
+        models_dir = current_file.parents[1] / "models"
+        
+        training_data = [
+            'mati_imagery_1_run1_20251207_183302_raw.fif',
+            'mati_imagery_2_run1_20251207_190808_raw.fif',
+            'mati_imagery_3_real_classifier_run1_20251207_204045_raw.fif',
+            'mati_imagery_4_real_classifier_run1_20251207_210156_raw.fif',
+            'mati_imagery2_run1_20251211_211512_raw.fif',
+            'mati_imagery2_run2_20251211_205846_raw.fif',
+            'mati_imagery3_run1_20251217_204245_raw.fif',
+            #'mati_imagery3_run2_20251217_212624_raw.fif'
+        ]
+        training_data = [data_dir / data_path for data_path in training_data]
+        target_events = ["relax", "left_hand", "right_hand", "both_hands", "both_feets"]
+
+        epoch_segment = 2.0
+        epoch_step = 1.0
+        epochs = tools.split_annotated_into_segments(training_data, epoch_segment, epoch_step)
+        epochs = epochs[target_events]
+        
+        clf = make_pipeline(Covariances("oas"), TangentSpace(metric="riemann"), SVC(kernel="linear", probability=True))
+
+        X = epochs.get_data(copy=True)
+        y = epochs.events[:, -1]
+
+        cv = StratifiedKFold(n_splits=10, shuffle=True, random_state=42)
+        cv_scores = cross_val_score(clf, X, y, cv=cv)
+        print(f"CV Accuracy: {np.mean(cv_scores):.4f} +/- {np.std(cv_scores):.4f}")
+
+        clf.fit(X, y)
+        joblib.dump(clf, models_dir / "tgsp.joblib")
+
+    def predict_proba(self, data: np.ndarray, fs: float) -> np.ndarray:        
+        # Set proper magnitude of data
+        if np.max(np.abs(data)) > 1e-3:
+            data = data * 1e-6
+        
+        # Prepare for prediction (1, ch, time)
+        X = data[np.newaxis, :, :]
+        
+        try:
+            probs = self.model.predict_proba(X)[0] 
+            classes = self.model.classes_ # e.g. [1, 2] or [2, 3, 4, 5], where 1=Relax, 2=Left, etc.
+            
+            # Map to standard vector of size 5 even if the model has different number of classes
+            # classes-1 because the classes are 1-based, and we want 0-based indexing
+            full_probs = np.zeros(5)
+            full_probs[classes-1] = probs
+            return full_probs
+        except Exception as e:
+            print(f"Prediction error: {e}")
+            return np.zeros(5)

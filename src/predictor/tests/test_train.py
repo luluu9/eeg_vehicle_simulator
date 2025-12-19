@@ -4,11 +4,11 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parents[3]
 sys.path.append(str(project_root))
 
-from src.predictor.core.classifiers import CSPSVMClassifier
+from src.predictor.core.classifiers import CSPSVMClassifier, TGSPClassifier
 
 def test_train():
-    print("Testing CSPSVMClassifier.train()...")
-    clf = CSPSVMClassifier(r"eeg_vehicle_simulator\src\predictor\models\csp_svm.joblib")
+    print("Testing TGSPClassifier.train()...")
+    clf = TGSPClassifier(r"eeg_vehicle_simulator\src\predictor\models\csp_svm.joblib")
     
     try:
         clf.train()
