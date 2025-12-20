@@ -53,6 +53,21 @@ class HUD:
             y += 20
             
         y += 20
+        self._draw_text(surface, "Active Strategy Info:", (10, y), color=(0, 255, 255))
+        y += 20
+        debug_info = strat.get_debug_info(strategy_mgr.selected_stream)
+        if debug_info:
+            for k, v in debug_info.items():
+                col = (255, 255, 255)
+                if k == "Override" and v != "NONE":
+                    col = (255, 50, 50) # Alert Red
+                self._draw_text(surface, f"  {k}: {v}", (10, y), color=col)
+                y += 20
+        else:
+             self._draw_text(surface, "  (No info)", (10, y), color=(150, 150, 150))
+             y += 20
+             
+        y += 10
         self._draw_text(surface, "Streams (Press TAB to cycle driving stream):", (10, y), color=(0, 255, 255))
         y += 25
         

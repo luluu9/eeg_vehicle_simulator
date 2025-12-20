@@ -22,6 +22,7 @@ def main():
     
     # Setup environment
     env = gym.make("WheelchairRacing-v0", render_mode="human", max_episode_steps=10_000_000)
+    strategy_mgr.set_env(env)
     obs, info = env.reset()
     screen = pygame.display.get_surface()
     width, height = screen.get_size()
@@ -79,7 +80,7 @@ def main():
         # 3. Process Strategy
         # Note: If no streams, should returns relax (0,0,0)
         action = strategy_mgr.process(all_probs)
-        print(action)
+
         # 4. Step
         obs, reward, terminated, truncated, info = env.step(action)
         done = terminated or truncated
