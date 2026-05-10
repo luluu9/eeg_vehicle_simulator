@@ -23,10 +23,18 @@ CUE_SYMBOLS = {
 
 
 class WheelchairStimulus:
+    WARMUP_STEPS = 50
+
     def __init__(self):
         self.env = gym.make("WheelchairRacing-v0", render_mode="rgb_array")
         self.env.reset()
+        self._warmup()
         self._current_frame = self.env.render()
+
+    def _warmup(self):
+        noop = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+        for _ in range(self.WARMUP_STEPS):
+            self.env.step(noop)
 
     def get_frame(self) -> np.ndarray:
         return self._current_frame
@@ -40,6 +48,7 @@ class WheelchairStimulus:
 
     def reset(self):
         self.env.reset()
+        self._warmup()
         self._current_frame = self.env.render()
 
     def close(self):
@@ -115,9 +124,9 @@ class StimulusWindow(QWidget):
 
     def show_imagery(self, task: TaskType):
         self._stop_animations()
-        self._blink_task = task
-        self._blink_visible = True
-        self._blink_timer.start(500)
+        frame = self._stimulus.get_frame()
+        pixmap = draw_cue_overlay(frame_to_pixmap(frame), task)
+        self._set_pixmap(pixmap)
 
     def show_feedback(self, predicted_task: TaskType, is_correct: bool):
         self._stop_animations()

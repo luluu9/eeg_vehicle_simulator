@@ -152,8 +152,12 @@ class CollectorWindow(QMainWindow):
         self.status_label.setText(f"Stopped. Saved partial data.")
 
     def _on_state_changed(self, state: ExperimentState):
-        if state == ExperimentState.IDLE and self.stimulus_window:
-            self.stimulus_window.show_idle()
+        if self.stimulus_window:
+            if state == ExperimentState.IDLE:
+                self.stimulus_window.show_idle()
+            elif state == ExperimentState.IMAGERY:
+                task = self.experiment.current_task
+                self.stimulus_window.show_imagery(task)
         self.status_label.setText(state.name)
 
     def _on_task_changed(self, task: TaskType):
