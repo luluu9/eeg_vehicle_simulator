@@ -23,18 +23,10 @@ CUE_SYMBOLS = {
 
 
 class WheelchairStimulus:
-    WARMUP_STEPS = 50
-
     def __init__(self):
         self.env = gym.make("WheelchairRacing-v0", render_mode="rgb_array")
         self.env.reset()
-        self._warmup()
         self._current_frame = self.env.render()
-
-    def _warmup(self):
-        noop = np.array([0.0, 0.0, 0.0], dtype=np.float32)
-        for _ in range(self.WARMUP_STEPS):
-            self.env.step(noop)
 
     def get_frame(self) -> np.ndarray:
         return self._current_frame
@@ -46,7 +38,6 @@ class WheelchairStimulus:
 
     def reset(self):
         self.env.reset()
-        self._warmup()
         self._current_frame = self.env.render()
 
     def close(self):
