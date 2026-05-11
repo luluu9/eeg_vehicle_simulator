@@ -89,6 +89,10 @@ def draw_feedback_border(pixmap: QPixmap, is_correct: bool) -> QPixmap:
     return result
 
 
+NOOP_ACTION = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+SIM_INTERVAL_MS = 33
+
+
 class StimulusWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -102,65 +106,50 @@ class StimulusWindow(QWidget):
         layout.addWidget(self._label)
 
         self._stimulus = WheelchairStimulus()
-        self._anim_timer = QTimer()
-        self._anim_timer.timeout.connect(self._anim_step)
-        self._anim_action = None
-        self._anim_is_correct = None
-        self._blink_timer = QTimer()
-        self._blink_timer.timeout.connect(self._blink_step)
-        self._blink_visible = True
-        self._blink_task = None
+
+        self._action = NOOP_ACTION
+        self._overlay_task = None
+        self._feedback_border = None
+
+        self._sim_timer = QTimer()
+        self._sim_timer.timeout.connect(self._sim_step)
+        self._sim_timer.start(SIM_INTERVAL_MS)
 
     def show_idle(self):
-        self._stop_animations()
-        frame = self._stimulus.get_frame()
-        self._set_pixmap(frame_to_pixmap(frame))
+        self._action = NOOP_ACTION
+        self._overlay_task = None
+        self._feedback_border = None
 
     def show_cue(self, task: TaskType):
-        self._stop_animations()
-        frame = self._stimulus.get_frame()
-        pixmap = draw_cue_overlay(frame_to_pixmap(frame), task)
-        self._set_pixmap(pixmap)
+        self._action = NOOP_ACTION
+        self._overlay_task = task
+        self._feedback_border = None
 
     def show_imagery(self, task: TaskType):
-        self._stop_animations()
-        frame = self._stimulus.get_frame()
-        pixmap = draw_cue_overlay(frame_to_pixmap(frame), task)
-        self._set_pixmap(pixmap)
+        self._action = NOOP_ACTION
+        self._overlay_task = task
+        self._feedback_border = None
 
     def show_feedback(self, predicted_task: TaskType, is_correct: bool):
-        self._stop_animations()
-        self._anim_action = ACTION_MAP[predicted_task]
-        self._anim_is_correct = is_correct
-        self._anim_timer.start(33)
+        self._action = ACTION_MAP[predicted_task]
+        self._overlay_task = None
+        self._feedback_border = is_correct
 
     def reset_env(self):
         self._stimulus.reset()
 
     def close_env(self):
+        self._sim_timer.stop()
         self._stimulus.close()
 
-    def _anim_step(self):
-        if self._anim_action is None:
-            return
-        frame = self._stimulus.step(self._anim_action)
-        pixmap = draw_feedback_border(frame_to_pixmap(frame), self._anim_is_correct)
+    def _sim_step(self):
+        frame = self._stimulus.step(self._action)
+        pixmap = frame_to_pixmap(frame)
+        if self._overlay_task is not None:
+            pixmap = draw_cue_overlay(pixmap, self._overlay_task)
+        if self._feedback_border is not None:
+            pixmap = draw_feedback_border(pixmap, self._feedback_border)
         self._set_pixmap(pixmap)
-
-    def _blink_step(self):
-        self._blink_visible = not self._blink_visible
-        frame = self._stimulus.get_frame()
-        if self._blink_visible and self._blink_task is not None:
-            pixmap = draw_cue_overlay(frame_to_pixmap(frame), self._blink_task)
-        else:
-            pixmap = frame_to_pixmap(frame)
-        self._set_pixmap(pixmap)
-
-    def _stop_animations(self):
-        self._anim_timer.stop()
-        self._blink_timer.stop()
-        self._anim_action = None
-        self._blink_task = None
 
     def _set_pixmap(self, pixmap: QPixmap):
         scaled = pixmap.scaled(
@@ -171,6 +160,5 @@ class StimulusWindow(QWidget):
         self._label.setPixmap(scaled)
 
     def closeEvent(self, event):
-        self._stop_animations()
         self.close_env()
         super().closeEvent(event)
