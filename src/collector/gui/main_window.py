@@ -120,6 +120,8 @@ class CollectorWindow(QMainWindow):
             self.status_label.setText(f"Error: {e}")
             return
 
+        self._refresh_timer.stop()
+
         self.stimulus_window = StimulusWindow()
         self.stimulus_window.showFullScreen()
 
@@ -147,6 +149,8 @@ class CollectorWindow(QMainWindow):
         if self.stimulus_window:
             self.stimulus_window.close()
             self.stimulus_window = None
+
+        self._refresh_timer.start(2000)
 
         self._set_controls_running(False)
         self.status_label.setText(f"Stopped. Saved partial data.")
@@ -202,6 +206,7 @@ class CollectorWindow(QMainWindow):
             self.stimulus_window = None
 
         self._set_controls_running(False)
+        self._refresh_timer.start(2000)
 
         total = self.config.total_trials
         self.status_label.setText(f"Finished! {total} trials saved.")

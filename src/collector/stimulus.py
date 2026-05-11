@@ -90,7 +90,7 @@ def draw_feedback_border(pixmap: QPixmap, is_correct: bool) -> QPixmap:
 
 
 NOOP_ACTION = np.array([0.0, 0.0, 0.0], dtype=np.float32)
-SIM_INTERVAL_MS = 33
+SIM_INTERVAL_MS = 50
 
 
 class StimulusWindow(QWidget):
@@ -155,7 +155,7 @@ class StimulusWindow(QWidget):
         scaled = pixmap.scaled(
             self._label.size(),
             Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
+            Qt.TransformationMode.FastTransformation,
         )
         self._label.setPixmap(scaled)
 
