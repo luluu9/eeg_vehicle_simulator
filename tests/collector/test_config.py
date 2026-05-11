@@ -9,7 +9,7 @@ class TestCollectorConfig:
         assert config.idle_duration == 1.5
         assert config.cue_duration == 1.5
         assert config.imagery_duration == 3.5
-        assert config.feedback_duration == 1.0
+        assert config.feedback_duration == 1.5
         assert config.n_runs == 10
         assert config.trials_per_run == 24
         assert config.error_rate == 0.3
@@ -21,7 +21,7 @@ class TestCollectorConfig:
 
     def test_trial_duration(self):
         config = CollectorConfig()
-        assert config.trial_duration == 7.5
+        assert config.trial_duration == 8.0
 
     def test_four_classes(self):
         config = CollectorConfig()

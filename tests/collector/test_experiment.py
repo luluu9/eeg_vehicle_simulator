@@ -58,7 +58,7 @@ class TestExperimentState:
     def test_timing_feedback(self, session):
         session.current_task = TaskType.LEFT_HAND
         session._enter_feedback()
-        assert session._timer.interval() == 1000
+        assert session._timer.interval() == 1500
 
 
 class TestExperimentTrials:

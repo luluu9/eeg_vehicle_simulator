@@ -24,7 +24,7 @@ class CollectorConfig:
     idle_duration: float = 1.5
     cue_duration: float = 1.5
     imagery_duration: float = 3.5
-    feedback_duration: float = 1.0
+    feedback_duration: float = 1.5
 
     n_runs: int = 10
     trials_per_run: int = 24
