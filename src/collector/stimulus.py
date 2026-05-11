@@ -40,9 +40,7 @@ class WheelchairStimulus:
         return self._current_frame
 
     def step(self, action: np.ndarray) -> np.ndarray:
-        _, _, terminated, truncated, _ = self.env.step(action)
-        if terminated or truncated:
-            self.env.reset()
+        self.env.step(action)
         self._current_frame = self.env.render()
         return self._current_frame
 
