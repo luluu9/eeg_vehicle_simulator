@@ -1,7 +1,7 @@
 import numpy as np
 import gymnasium as gym
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QImage, QPixmap, QPainter, QColor, QFont, QPen
+from PyQt6.QtGui import QImage, QPixmap, QPainter, QPainterPath, QColor, QFont, QPen, QBrush
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout
 
 from .config import TaskType
@@ -21,6 +21,8 @@ CUE_SYMBOLS = {
     TaskType.REST: "○",
 }
 
+WHEELCHAIR_CENTER_X_RATIO = 0.5
+WHEELCHAIR_CENTER_Y_RATIO = 0.75
 
 class WheelchairStimulus:
     def __init__(self):
@@ -51,18 +53,50 @@ def frame_to_pixmap(frame: np.ndarray) -> QPixmap:
     return QPixmap.fromImage(image)
 
 
+def draw_fixation_cross(pixmap: QPixmap) -> QPixmap:
+    result = pixmap.copy()
+    painter = QPainter(result)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    cx = int(result.width() * WHEELCHAIR_CENTER_X_RATIO)
+    cy = int(result.height() * WHEELCHAIR_CENTER_Y_RATIO)
+    size = 20
+    pen = QPen(QColor(0, 100, 255), 3)
+    painter.setPen(pen)
+    painter.drawLine(cx - size, cy, cx + size, cy)
+    painter.drawLine(cx, cy - size, cx, cy + size)
+
+    painter.end()
+    return result
+
+
 def draw_cue_overlay(pixmap: QPixmap, task: TaskType) -> QPixmap:
     result = pixmap.copy()
     painter = QPainter(result)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    symbol = CUE_SYMBOLS[task]
-    font = QFont("Arial", 72, QFont.Weight.Bold)
-    painter.setFont(font)
-    painter.setPen(QPen(QColor(255, 255, 0), 3))
+    cx = int(result.width() * WHEELCHAIR_CENTER_X_RATIO)
+    cy = int(result.height() * WHEELCHAIR_CENTER_Y_RATIO)
 
-    rect = result.rect()
-    painter.drawText(rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, symbol)
+    cross_size = 20
+    pen = QPen(QColor(0, 100, 255), 3)
+    painter.setPen(pen)
+    painter.drawLine(cx - cross_size, cy, cx + cross_size, cy)
+    painter.drawLine(cx, cy - cross_size, cx, cy + cross_size)
+
+    symbol = CUE_SYMBOLS[task]
+    symbol_size = 90
+    font = QFont("Arial", symbol_size, QFont.Weight.Bold)
+    painter.setFont(font)
+
+    path = QPainterPath()
+    path.addText(0, 0, font, symbol)
+    br = path.boundingRect()
+    path.translate(cx - br.center().x(), cy - br.center().y())
+    painter.setPen(QPen(QColor(255, 255, 0), 3))
+    painter.setBrush(QBrush(QColor(255, 255, 0)))
+    painter.drawPath(path)
+
     painter.end()
     return result
 
@@ -136,6 +170,8 @@ class StimulusWindow(QWidget):
         pixmap = frame_to_pixmap(frame)
         if self._overlay_task is not None:
             pixmap = draw_cue_overlay(pixmap, self._overlay_task)
+        else:
+            pixmap = draw_fixation_cross(pixmap)
         if self._feedback_border is not None:
             pixmap = draw_feedback_border(pixmap, self._feedback_border)
         self._set_pixmap(pixmap)
