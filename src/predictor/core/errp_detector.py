@@ -7,8 +7,9 @@ from ...common.constants import ErrPConfig
 
 
 class ErrPPreprocessor:
-    def __init__(self, target_srate: float = 256.0):
+    def __init__(self, target_srate: float = 256.0, tmin: float = -0.2, tmax: float = 0.8):
         self.target_srate = target_srate
+        self.expected_samples = int(round((tmax - tmin) * target_srate)) + 1
 
     def process(self, data: np.ndarray, input_srate: float) -> np.ndarray:
         if data.shape[0] > 16:
@@ -19,10 +20,7 @@ class ErrPPreprocessor:
 
         data = data - data.mean(axis=0, keepdims=True)
 
-        n_samples = data.shape[1]
-        if input_srate != self.target_srate:
-            target_samples = int((n_samples / input_srate) * self.target_srate)
-            data = signal.resample(data, target_samples, axis=1)
+        data = signal.resample(data, self.expected_samples, axis=1)
 
         nyq = 0.5 * self.target_srate
         b, a = signal.butter(5, [1.0 / nyq, 10.0 / nyq], btype='band')
