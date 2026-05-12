@@ -16,6 +16,12 @@ from pathlib import Path
 from pyriemann.estimation import Covariances
 from pyriemann.tangentspace import TangentSpace
 
+from ...common.constants import StudyClass
+
+
+N_LEGACY_CLASSES = 5
+N_STUDY_CLASSES = 4
+
 class BaseClassifier(ABC):
     def __init__(self):
         self._min_window = 1.0 # Default
@@ -298,3 +304,34 @@ class TGSPClassifier(BaseClassifier):
         except Exception as e:
             print(f"Prediction error: {e}")
             return np.zeros(5)
+
+
+class StudyMIClassifier(BaseClassifier):
+    def __init__(self, model_path: str):
+        super().__init__()
+        self.model_path = model_path
+        self._min_window = 2.0
+        self._max_window = 5.0
+        self.model = joblib.load(model_path)
+        print(f"Loaded study MI model: {model_path}")
+
+    @property
+    def name(self):
+        return "StudyMI_TSLR"
+
+    def predict_proba(self, data: np.ndarray, fs: float) -> np.ndarray:
+        if np.max(np.abs(data)) > 1e-3:
+            data = data * 1e-6
+        X = data[np.newaxis, :, :]
+        try:
+            probs = self.model.predict_proba(X)[0]
+            classes = self.model.classes_
+            full_probs = np.zeros(N_STUDY_CLASSES)
+            for i, cls in enumerate(classes):
+                idx = cls - 1
+                if 0 <= idx < N_STUDY_CLASSES:
+                    full_probs[idx] = probs[i]
+            return full_probs
+        except Exception as e:
+            print(f"StudyMI prediction error: {e}")
+            return np.zeros(N_STUDY_CLASSES)
