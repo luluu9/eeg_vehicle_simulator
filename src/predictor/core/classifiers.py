@@ -335,3 +335,35 @@ class StudyMIClassifier(BaseClassifier):
         except Exception as e:
             print(f"StudyMI prediction error: {e}")
             return np.zeros(N_STUDY_CLASSES)
+
+
+class StudyErrPClassifier(BaseClassifier):
+    def __init__(self, model_path: str):
+        super().__init__()
+        self.model_path = model_path
+        self._min_window = 0.5
+        self._max_window = 2.0
+        self.model = joblib.load(model_path)
+        print(f"Loaded study ErrP model: {model_path}")
+
+    @property
+    def name(self):
+        return "StudyErrP_XDawn"
+
+    def predict_proba(self, data: np.ndarray, fs: float) -> np.ndarray:
+        if np.max(np.abs(data)) > 1e-3:
+            data = data * 1e-6
+        X = data[np.newaxis, :, :]
+        try:
+            probs = self.model.predict_proba(X)[0]
+            classes = self.model.classes_
+            full_probs = np.zeros(2)
+            for i, cls in enumerate(classes):
+                if cls in (20, 0):
+                    full_probs[0] = probs[i]
+                elif cls in (21, 1):
+                    full_probs[1] = probs[i]
+            return full_probs
+        except Exception as e:
+            print(f"StudyErrP prediction error: {e}")
+            return np.array([0.5, 0.5])
