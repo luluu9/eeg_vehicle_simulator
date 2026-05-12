@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+import time
 import numpy as np
-from ..common.constants import LSLChannel
+from ..common.constants import LSLChannel, StudyClass
 from ..rl_interface.environment_bridge import RLInterface
 
 
@@ -33,10 +34,11 @@ class BaseStrategy(ABC):
         return self._name
 
     @abstractmethod
-    def compute(self, all_probs, selected_stream):
+    def compute(self, all_probs, selected_stream, errp_data=None):
         """
         all_probs: dict {name: np.array}
         selected_stream: str
+        errp_data: dict {name: np.array} or None (ErrP predictions)
         Returns: np.array([steer, gas, brake]) or None (if no decision/relax)
         """
         pass
@@ -64,7 +66,7 @@ class ThresholdStrategy(BaseStrategy):
         super().__init__("Threshold")
         self.threshold = 0.70
         
-    def compute(self, all_probs, selected_stream):
+    def compute(self, all_probs, selected_stream, errp_data=None):
         if selected_stream not in all_probs:
             return ControlMapper.map_class_to_action(LSLChannel.RELAX.value)
             
@@ -96,7 +98,7 @@ class AccumulatorStrategy(BaseStrategy):
         # We need state PER STREAM, because user might switch stream
         self.buffers = {} 
         
-    def compute(self, all_probs, selected_stream):
+    def compute(self, all_probs, selected_stream, errp_data=None):
         if selected_stream not in all_probs:
             return ControlMapper.map_class_to_action(LSLChannel.RELAX.value)
             
@@ -163,7 +165,7 @@ class RLInterfaceStrategy(BaseStrategy):
             )
         return self.interfaces[stream_name]
 
-    def compute(self, all_probs, selected_stream):
+    def compute(self, all_probs, selected_stream, errp_data=None):
         if selected_stream not in all_probs:
             return ControlMapper.map_class_to_action(LSLChannel.RELAX.value)
             
@@ -273,7 +275,7 @@ class StrategyManager:
     def next_strategy(self):
         self.active_idx = (self.active_idx + 1) % len(self.strategies)
         
-    def process(self, all_probs):
+    def process(self, all_probs, errp_data=None):
         # Auto-select first available stream if none selected
         if self.selected_stream is None or self.selected_stream not in all_probs:
             if all_probs:
@@ -281,4 +283,175 @@ class StrategyManager:
             else:
                 return ControlMapper.map_class_to_action(LSLChannel.RELAX.value)
 
-        return self.strategies[self.active_idx].compute(all_probs, self.selected_stream)
+        return self.strategies[self.active_idx].compute(all_probs, self.selected_stream, errp_data)
+
+
+# --- Study Fusion Strategies (4-class MI + ErrP) ---
+
+REST_ACTION = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+
+STUDY_ACTION_MAP = {
+    StudyClass.REST.value: np.array([0.0, 0.0, 0.0], dtype=np.float32),
+    StudyClass.LEFT.value: np.array([-0.5, 0.3, 0.0], dtype=np.float32),
+    StudyClass.RIGHT.value: np.array([0.5, 0.3, 0.0], dtype=np.float32),
+    StudyClass.FORWARD.value: np.array([0.0, 0.3, 0.0], dtype=np.float32),
+}
+
+
+def study_action(class_idx: int) -> np.ndarray:
+    return STUDY_ACTION_MAP.get(class_idx, REST_ACTION).copy()
+
+
+def _get_errp_error_prob(errp_data: dict | None) -> float:
+    if not errp_data:
+        return 0.0
+    for probs in errp_data.values():
+        return float(probs[1]) if len(probs) >= 2 else 0.0
+    return 0.0
+
+
+class BaselineStrategy(BaseStrategy):
+    def __init__(self):
+        super().__init__("Baseline")
+        self.threshold = 0.50
+
+    def compute(self, all_probs, selected_stream, errp_data=None):
+        if selected_stream not in all_probs:
+            return REST_ACTION.copy()
+        probs = all_probs[selected_stream]
+        max_idx = int(np.argmax(probs[:4]))
+        if probs[max_idx] >= self.threshold:
+            return study_action(max_idx)
+        return REST_ACTION.copy()
+
+    def get_params(self):
+        return {"Threshold": self.threshold}
+
+    def adjust_param(self, key, delta):
+        if key == "Threshold":
+            self.threshold = max(0.0, min(1.0, self.threshold + delta))
+
+    def get_debug_info(self, selected_stream):
+        return {"Type": "Baseline (MI only)"}
+
+
+class StopStrategy(BaseStrategy):
+    COOLDOWN_DURATION = 1.0
+
+    def __init__(self):
+        super().__init__("STOP")
+        self.threshold = 0.50
+        self.errp_threshold = 0.50
+        self._vetoed = False
+        self._veto_time = 0.0
+        self.correction_count = 0
+
+    def compute(self, all_probs, selected_stream, errp_data=None):
+        now = time.monotonic()
+
+        error_prob = _get_errp_error_prob(errp_data)
+        if not self._vetoed and error_prob >= self.errp_threshold:
+            self._vetoed = True
+            self._veto_time = now
+            self.correction_count += 1
+
+        if self._vetoed:
+            if now - self._veto_time >= self.COOLDOWN_DURATION:
+                self._vetoed = False
+            return REST_ACTION.copy()
+
+        if selected_stream not in all_probs:
+            return REST_ACTION.copy()
+        probs = all_probs[selected_stream]
+        max_idx = int(np.argmax(probs[:4]))
+        if probs[max_idx] >= self.threshold:
+            return study_action(max_idx)
+        return REST_ACTION.copy()
+
+    def get_params(self):
+        return {"Threshold": self.threshold, "ErrP_Thr": self.errp_threshold}
+
+    def adjust_param(self, key, delta):
+        if key == "Threshold":
+            self.threshold = max(0.0, min(1.0, self.threshold + delta))
+        elif key == "ErrP_Thr":
+            self.errp_threshold = max(0.0, min(1.0, self.errp_threshold + delta))
+
+    def get_debug_info(self, selected_stream):
+        return {
+            "Type": "STOP (MI + ErrP veto)",
+            "Vetoed": self._vetoed,
+            "Corrections": self.correction_count,
+        }
+
+    def reset_state(self):
+        self._vetoed = False
+        self.correction_count = 0
+
+
+class AutocorrectStrategy(BaseStrategy):
+    CORRECTION_DURATION = 1.0
+
+    def __init__(self):
+        super().__init__("Autocorrect")
+        self.threshold = 0.50
+        self.errp_threshold = 0.50
+        self._correcting = False
+        self._correction_time = 0.0
+        self._correction_action = REST_ACTION
+        self.correction_count = 0
+        self._last_probs: np.ndarray | None = None
+
+    def compute(self, all_probs, selected_stream, errp_data=None):
+        now = time.monotonic()
+
+        error_prob = _get_errp_error_prob(errp_data)
+        if not self._correcting and error_prob >= self.errp_threshold and self._last_probs is not None:
+            sorted_idx = np.argsort(self._last_probs[:4])[::-1]
+            second_best = int(sorted_idx[1])
+            self._correction_action = study_action(second_best)
+            self._correcting = True
+            self._correction_time = now
+            self.correction_count += 1
+
+        if self._correcting:
+            if now - self._correction_time >= self.CORRECTION_DURATION:
+                self._correcting = False
+            return self._correction_action.copy()
+
+        if selected_stream not in all_probs:
+            return REST_ACTION.copy()
+        probs = all_probs[selected_stream]
+        self._last_probs = probs.copy()
+        max_idx = int(np.argmax(probs[:4]))
+        if probs[max_idx] >= self.threshold:
+            return study_action(max_idx)
+        return REST_ACTION.copy()
+
+    def get_params(self):
+        return {"Threshold": self.threshold, "ErrP_Thr": self.errp_threshold}
+
+    def adjust_param(self, key, delta):
+        if key == "Threshold":
+            self.threshold = max(0.0, min(1.0, self.threshold + delta))
+        elif key == "ErrP_Thr":
+            self.errp_threshold = max(0.0, min(1.0, self.errp_threshold + delta))
+
+    def get_debug_info(self, selected_stream):
+        return {
+            "Type": "Autocorrect (MI + ErrP → 2nd best)",
+            "Correcting": self._correcting,
+            "Corrections": self.correction_count,
+        }
+
+    def reset_state(self):
+        self._correcting = False
+        self._last_probs = None
+        self.correction_count = 0
+
+
+STUDY_STRATEGIES = {
+    "baseline": BaselineStrategy,
+    "stop": StopStrategy,
+    "autocorrect": AutocorrectStrategy,
+}

@@ -15,6 +15,14 @@ class LSLChannel(Enum):
     def names(cls):
         return [c.name for c in cls.to_list()]
 
+
+class StudyClass(Enum):
+    REST = 0
+    LEFT = 1
+    RIGHT = 2
+    FORWARD = 3
+
+
 class LSLConfig:
     # The prefix for classifier streams. 
     # Complete name will be f"{STREAM_PREFIX}_{ClassifierName}"
@@ -29,3 +37,8 @@ class LSLConfig:
     # Nominal sampling rate for the output stream
     # It's irregular because it depends on prediction interval, but we set a nominal value.
     NOMINAL_SRATE = 0.0 # 0.0 indicates irregular sampling
+
+
+class ErrPConfig:
+    CONTENT_TYPE = "ErrP_Detection"
+    CHANNEL_COUNT = 2  # [p_correct, p_error]
