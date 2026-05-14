@@ -95,14 +95,15 @@ class DataHandler:
             return full_data, np.array(self._timestamps)
 
 class PredictionBroadcaster:
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str, channel_count: int | None = None):
         self.model_name = model_name
         self.stream_name = f"{LSLConfig.STREAM_PREFIX}_{model_name}"
-        
+        n_channels = channel_count if channel_count is not None else LSLConfig.CHANNEL_COUNT
+
         self.info = StreamInfo(
             name=self.stream_name,
             type=LSLConfig.CONTENT_TYPE,
-            channel_count=LSLConfig.CHANNEL_COUNT,
+            channel_count=n_channels,
             nominal_srate=LSLConfig.NOMINAL_SRATE,
             channel_format='float32',
             source_id=f"pred_{model_name}"
@@ -112,8 +113,4 @@ class PredictionBroadcaster:
         print(f"Created Outlet: {self.stream_name}")
         
     def push_prediction(self, probabilities: np.ndarray):
-        """
-        Push a sample. 
-        probabilities: (5,) float array
-        """
         self.outlet.push_sample(probabilities)

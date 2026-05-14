@@ -43,7 +43,7 @@ class MultiStreamMonitor:
                             print(f"Found MI stream: {name}")
                             inlet = StreamInlet(info)
                             self.streams[name] = inlet
-                            self.latest_data[name] = (np.zeros(5), 0)
+                            self.latest_data[name] = (np.zeros(info.channel_count()), 0)
                 elif info.type() == ErrPConfig.CONTENT_TYPE:
                     found_errp_names.add(name)
                     with self.lock:

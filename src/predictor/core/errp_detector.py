@@ -49,6 +49,7 @@ class ErrPDetector:
 
         self._eeg_buffer = []
         self._eeg_ts_buffer = []
+        self._buffer_lock = threading.Lock()
         self._srate = 0.0
 
     def start(self, eeg_stream_name: str | None = None, marker_stream_name: str | None = None):
@@ -110,11 +111,12 @@ class ErrPDetector:
         while self._running:
             chunk, ts = self._eeg_inlet.pull_chunk(timeout=0.0)
             if ts:
-                self._eeg_buffer.extend(chunk)
-                self._eeg_ts_buffer.extend(ts)
-                while len(self._eeg_buffer) > max_buffer:
-                    self._eeg_buffer.pop(0)
-                    self._eeg_ts_buffer.pop(0)
+                with self._buffer_lock:
+                    self._eeg_buffer.extend(chunk)
+                    self._eeg_ts_buffer.extend(ts)
+                    while len(self._eeg_buffer) > max_buffer:
+                        self._eeg_buffer.pop(0)
+                        self._eeg_ts_buffer.pop(0)
 
             sample, marker_ts = self._marker_inlet.pull_sample(timeout=0.0)
             if sample and marker_ts:
@@ -129,10 +131,12 @@ class ErrPDetector:
         threading.Timer(delay, self._classify_window, args=(feedback_ts,)).start()
 
     def _classify_window(self, feedback_ts: float):
-        if not self._eeg_ts_buffer:
-            return
+        with self._buffer_lock:
+            if not self._eeg_ts_buffer:
+                return
+            ts_arr = np.array(self._eeg_ts_buffer)
+            data_arr = np.array(self._eeg_buffer)
 
-        ts_arr = np.array(self._eeg_ts_buffer)
         t_start = feedback_ts + self.window_start
         t_end = feedback_ts + self.window_end
         mask = (ts_arr >= t_start) & (ts_arr <= t_end)
@@ -141,7 +145,7 @@ class ErrPDetector:
             print(f"ErrP Detector: not enough samples ({mask.sum()}) for window")
             return
 
-        data = np.array(self._eeg_buffer)[mask].T
+        data = data_arr[mask].T
 
         try:
             processed = self.preprocessor.process(data, self._srate)
