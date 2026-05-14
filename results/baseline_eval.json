@@ -1,0 +1,23 @@
+{
+  "n_decisions": 55,
+  "duration_s": 56.09,
+  "action_distribution": {
+    "REST": 38,
+    "LEFT": 3,
+    "RIGHT": 5,
+    "FORWARD": 9
+  },
+  "mi_class_distribution": {
+    "REST": 21,
+    "LEFT": 6,
+    "RIGHT": 11,
+    "FORWARD": 17
+  },
+  "mi_accuracy_vs_ground_truth": 0.071,
+  "action_accuracy_vs_ground_truth": 0.0,
+  "n_labeled_decisions": 14,
+  "n_errp_error_detections": 15,
+  "avg_mi_confidence": 0.496,
+  "strategy": "baseline",
+  "mi_threshold": 0.5
+}

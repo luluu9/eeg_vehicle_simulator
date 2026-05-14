@@ -1,0 +1,32 @@
+{
+  "mode": "triggered",
+  "strategy": "baseline",
+  "n_trials": 38,
+  "mi_accuracy": 0.737,
+  "per_class_accuracy": {
+    "RIGHT": 0.8,
+    "LEFT": 0.9,
+    "FORWARD": 0.333,
+    "REST": 0.889
+  },
+  "per_class_n_trials": {
+    "RIGHT": 10,
+    "LEFT": 10,
+    "FORWARD": 9,
+    "REST": 9
+  },
+  "avg_confidence": 0.589,
+  "confusion": {
+    "RIGHT\u2192RIGHT": 8,
+    "LEFT\u2192LEFT": 9,
+    "FORWARD\u2192FORWARD": 3,
+    "REST\u2192REST": 8,
+    "FORWARD\u2192REST": 4,
+    "RIGHT\u2192LEFT": 1,
+    "LEFT\u2192RIGHT": 1,
+    "RIGHT\u2192FORWARD": 1,
+    "FORWARD\u2192RIGHT": 1,
+    "FORWARD\u2192LEFT": 1,
+    "REST\u2192LEFT": 1
+  }
+}
