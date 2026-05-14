@@ -177,33 +177,111 @@ class MIPredictorThread:
             time.sleep(0.01)
 
 
-class ActionLogger:
-    """Collects strategy decisions for analysis."""
+CLASS_NAMES = {0: "REST", 1: "LEFT", 2: "RIGHT", 3: "FORWARD"}
+ACTION_TO_CLASS = {
+    (0.0, 0.0, 0.0): 0,    # REST
+    (-0.5, 0.3, 0.0): 1,   # LEFT
+    (0.5, 0.3, 0.0): 2,    # RIGHT
+    (0.0, 0.3, 0.0): 3,    # FORWARD
+}
 
-    def __init__(self):
+
+class ActionLogger:
+    """Collects strategy decisions and computes evaluation metrics."""
+
+    def __init__(self, annotations: list[tuple[float, str]], speed: float):
         self.decisions: list[dict] = []
         self._start_time = 0.0
+        self._speed = speed
+        self._ground_truth = self._build_ground_truth(annotations)
+
+    def _build_ground_truth(self, annotations: list[tuple[float, str]]) -> list[tuple[float, float, int]]:
+        """Build (start, end, class) intervals from annotations."""
+        intervals = []
+        for onset, desc in annotations:
+            try:
+                cls = int(desc)
+                if 1 <= cls <= 4:
+                    intervals.append((onset, onset + 3.5, cls))
+            except ValueError:
+                continue
+        return intervals
+
+    def _get_true_class(self, real_time: float) -> int | None:
+        """Map real elapsed time → simulated stream time → ground truth class."""
+        stream_time = real_time * self._speed
+        for start, end, cls in self._ground_truth:
+            if start <= stream_time <= end:
+                return cls
+        return None
 
     def start(self):
         self._start_time = time.monotonic()
 
     def log(self, action: np.ndarray, mi_probs: dict, errp_probs: dict):
+        t = time.monotonic() - self._start_time
+        action_tuple = tuple(round(float(x), 1) for x in action)
+        predicted_class = ACTION_TO_CLASS.get(action_tuple, 0)
+
+        mi_stream = next(iter(mi_probs), None)
+        raw_probs = mi_probs[mi_stream].tolist() if mi_stream else [0.0] * 4
+        mi_predicted = int(np.argmax(raw_probs))
+
+        errp_stream = next(iter(errp_probs), None)
+        errp_vals = errp_probs[errp_stream].tolist() if errp_stream else [0.5, 0.5]
+
+        true_class = self._get_true_class(t)
+
         self.decisions.append({
-            "t": time.monotonic() - self._start_time,
+            "t": t,
             "action": action.tolist(),
-            "mi_probs": {k: v.tolist() for k, v in mi_probs.items()},
-            "errp_probs": {k: v.tolist() for k, v in errp_probs.items()},
+            "predicted_class": predicted_class,
+            "mi_predicted": mi_predicted,
+            "mi_probs": raw_probs,
+            "errp_probs": errp_vals,
+            "true_class": true_class,
         })
 
     def summary(self) -> dict:
         if not self.decisions:
             return {"n_decisions": 0}
-        actions = [d["action"] for d in self.decisions]
-        non_rest = [a for a in actions if a != [0.0, 0.0, 0.0]]
+
+        n = len(self.decisions)
+        duration = self.decisions[-1]["t"]
+
+        action_classes = [d["predicted_class"] for d in self.decisions]
+        mi_classes = [d["mi_predicted"] for d in self.decisions]
+        true_classes = [d["true_class"] for d in self.decisions]
+
+        class_counts = {name: action_classes.count(i) for i, name in CLASS_NAMES.items()}
+        mi_class_counts = {name: mi_classes.count(i) for i, name in CLASS_NAMES.items()}
+
+        labeled = [(d["mi_predicted"], d["true_class"]) for d in self.decisions if d["true_class"] is not None]
+        mi_accuracy = None
+        if labeled:
+            correct = sum(1 for pred, true in labeled if pred == true)
+            mi_accuracy = correct / len(labeled)
+
+        action_labeled = [(d["predicted_class"], d["true_class"]) for d in self.decisions if d["true_class"] is not None]
+        action_accuracy = None
+        if action_labeled:
+            correct = sum(1 for pred, true in action_labeled if pred == true)
+            action_accuracy = correct / len(action_labeled)
+
+        errp_detections = [d for d in self.decisions if d["errp_probs"][1] >= 0.5]
+
+        avg_confidence = float(np.mean([max(d["mi_probs"]) for d in self.decisions]))
+
         return {
-            "n_decisions": len(self.decisions),
-            "n_non_rest": len(non_rest),
-            "duration_s": self.decisions[-1]["t"] if self.decisions else 0,
+            "n_decisions": n,
+            "duration_s": round(duration, 2),
+            "action_distribution": class_counts,
+            "mi_class_distribution": mi_class_counts,
+            "mi_accuracy_vs_ground_truth": round(mi_accuracy, 3) if mi_accuracy is not None else None,
+            "action_accuracy_vs_ground_truth": round(action_accuracy, 3) if action_accuracy is not None else None,
+            "n_labeled_decisions": len(labeled),
+            "n_errp_error_detections": len(errp_detections),
+            "avg_mi_confidence": round(avg_confidence, 3),
         }
 
 
@@ -230,11 +308,13 @@ def run_offline_evaluation(
     mi_clf = StudyMIClassifier(mi_model_path)
     errp_clf = StudyErrPClassifier(errp_model_path)
 
+    annotations = list(zip(raw.annotations.onset, raw.annotations.description))
+
     streamer = LSLReplayStreamer(raw, speed=speed)
     errp_detector = ErrPDetector(errp_clf)
     monitor = MultiStreamMonitor()
     strategy = STUDY_STRATEGIES[strategy_name]()
-    logger = ActionLogger()
+    logger = ActionLogger(annotations, speed)
 
     streamer.start()
     time.sleep(1.0)
@@ -295,9 +375,21 @@ def run_offline_evaluation(
     results["strategy"] = strategy_name
     if hasattr(strategy, 'correction_count'):
         results["corrections"] = strategy.correction_count
+    if hasattr(strategy, 'threshold'):
+        results["mi_threshold"] = strategy.threshold
+    if hasattr(strategy, 'errp_threshold'):
+        results["errp_threshold"] = strategy.errp_threshold
 
     print(f"\n{'='*60}")
-    print(f"RESULTS: {json.dumps(results, indent=2)}")
+    print(f"RESULTS")
+    print(f"{'='*60}")
+    for k, v in results.items():
+        if isinstance(v, dict):
+            print(f"  {k}:")
+            for kk, vv in v.items():
+                print(f"    {kk}: {vv}")
+        else:
+            print(f"  {k}: {v}")
     print(f"{'='*60}")
     return results
 
@@ -310,13 +402,19 @@ def main():
     parser.add_argument("--strategy", choices=list(STUDY_STRATEGIES.keys()), default="baseline")
     parser.add_argument("--speed", type=float, default=5.0, help="Replay speed multiplier")
     parser.add_argument("--duration", type=float, default=None, help="Max eval duration (seconds)")
+    parser.add_argument("--output", "-o", type=str, default=None, help="Save results JSON to file")
     args = parser.parse_args()
 
     results = run_offline_evaluation(
         args.data_file, args.mi_model, args.errp_model,
         strategy_name=args.strategy, speed=args.speed, duration=args.duration,
     )
-    print(json.dumps(results, indent=2))
+
+    if args.output:
+        Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+        with open(args.output, "w") as f:
+            json.dump(results, f, indent=2)
+        print(f"\nResults saved to: {args.output}")
 
 
 if __name__ == "__main__":
