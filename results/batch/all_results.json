@@ -1,0 +1,454 @@
+{
+  "subject1": [
+    {
+      "mode": "triggered",
+      "strategy": "baseline",
+      "n_trials": 37,
+      "mi_accuracy": 0.757,
+      "per_class_accuracy": {
+        "REST": 1.0,
+        "FORWARD": 0.7,
+        "RIGHT": 0.667,
+        "LEFT": 0.625
+      },
+      "per_class_n_trials": {
+        "REST": 10,
+        "FORWARD": 10,
+        "RIGHT": 9,
+        "LEFT": 8
+      },
+      "avg_confidence": 0.639,
+      "confusion": {
+        "REST\u2192REST": 10,
+        "FORWARD\u2192LEFT": 1,
+        "RIGHT\u2192LEFT": 2,
+        "LEFT\u2192LEFT": 5,
+        "RIGHT\u2192RIGHT": 6,
+        "FORWARD\u2192FORWARD": 7,
+        "FORWARD\u2192RIGHT": 2,
+        "LEFT\u2192FORWARD": 1,
+        "LEFT\u2192RIGHT": 2,
+        "RIGHT\u2192FORWARD": 1
+      },
+      "file_label": "subject1_ses1_run1",
+      "file_path": "D:\\STUDIA\\ZPB-antigravity\\data_organized\\subject1_ses1_run1_20251206_185544_raw.fif"
+    },
+    {
+      "mode": "triggered",
+      "strategy": "baseline",
+      "n_trials": 37,
+      "mi_accuracy": 0.73,
+      "per_class_accuracy": {
+        "RIGHT": 0.444,
+        "REST": 0.9,
+        "LEFT": 0.667,
+        "FORWARD": 0.889
+      },
+      "per_class_n_trials": {
+        "RIGHT": 9,
+        "REST": 10,
+        "LEFT": 9,
+        "FORWARD": 9
+      },
+      "avg_confidence": 0.626,
+      "confusion": {
+        "RIGHT\u2192REST": 1,
+        "REST\u2192REST": 9,
+        "LEFT\u2192FORWARD": 3,
+        "FORWARD\u2192FORWARD": 8,
+        "RIGHT\u2192RIGHT": 4,
+        "LEFT\u2192LEFT": 6,
+        "RIGHT\u2192FORWARD": 2,
+        "RIGHT\u2192LEFT": 2,
+        "REST\u2192RIGHT": 1,
+        "FORWARD\u2192RIGHT": 1
+      },
+      "file_label": "subject1_ses1_run2",
+      "file_path": "D:\\STUDIA\\ZPB-antigravity\\data_organized\\subject1_ses1_run2_20251206_191125_raw.fif"
+    }
+  ],
+  "subject3": [
+    {
+      "mode": "triggered",
+      "strategy": "baseline",
+      "n_trials": 38,
+      "mi_accuracy": 0.605,
+      "per_class_accuracy": {
+        "RIGHT": 0.5,
+        "LEFT": 0.9,
+        "FORWARD": 0.333,
+        "REST": 0.667
+      },
+      "per_class_n_trials": {
+        "RIGHT": 10,
+        "LEFT": 10,
+        "FORWARD": 9,
+        "REST": 9
+      },
+      "avg_confidence": 0.642,
+      "confusion": {
+        "RIGHT\u2192REST": 2,
+        "LEFT\u2192LEFT": 9,
+        "FORWARD\u2192REST": 3,
+        "REST\u2192REST": 6,
+        "RIGHT\u2192RIGHT": 5,
+        "REST\u2192LEFT": 1,
+        "RIGHT\u2192LEFT": 2,
+        "FORWARD\u2192FORWARD": 3,
+        "FORWARD\u2192LEFT": 2,
+        "REST\u2192RIGHT": 2,
+        "LEFT\u2192FORWARD": 1,
+        "RIGHT\u2192FORWARD": 1,
+        "FORWARD\u2192RIGHT": 1
+      },
+      "file_label": "subject3_ses1_run1",
+      "file_path": "D:\\STUDIA\\ZPB-antigravity\\data_organized\\subject3_ses1_run1_20251207_183304_raw.fif"
+    },
+    {
+      "mode": "triggered",
+      "strategy": "baseline",
+      "n_trials": 37,
+      "mi_accuracy": 0.676,
+      "per_class_accuracy": {
+        "RIGHT": 0.7,
+        "REST": 0.7,
+        "LEFT": 0.444,
+        "FORWARD": 0.875
+      },
+      "per_class_n_trials": {
+        "RIGHT": 10,
+        "REST": 10,
+        "LEFT": 9,
+        "FORWARD": 8
+      },
+      "avg_confidence": 0.721,
+      "confusion": {
+        "RIGHT\u2192FORWARD": 3,
+        "REST\u2192REST": 7,
+        "LEFT\u2192LEFT": 4,
+        "FORWARD\u2192FORWARD": 7,
+        "RIGHT\u2192RIGHT": 7,
+        "REST\u2192FORWARD": 3,
+        "LEFT\u2192REST": 1,
+        "LEFT\u2192FORWARD": 4,
+        "FORWARD\u2192LEFT": 1
+      },
+      "file_label": "subject3_ses1_run2",
+      "file_path": "D:\\STUDIA\\ZPB-antigravity\\data_organized\\subject3_ses1_run2_20251207_190808_raw.fif"
+    },
+    {
+      "mode": "triggered",
+      "strategy": "baseline",
+      "n_trials": 37,
+      "mi_accuracy": 0.649,
+      "per_class_accuracy": {
+        "FORWARD": 0.444,
+        "RIGHT": 0.9,
+        "LEFT": 0.6,
+        "REST": 0.625
+      },
+      "per_class_n_trials": {
+        "FORWARD": 9,
+        "RIGHT": 10,
+        "LEFT": 10,
+        "REST": 8
+      },
+      "avg_confidence": 0.695,
+      "confusion": {
+        "FORWARD\u2192REST": 1,
+        "RIGHT\u2192RIGHT": 9,
+        "LEFT\u2192LEFT": 6,
+        "REST\u2192RIGHT": 2,
+        "FORWARD\u2192FORWARD": 4,
+        "REST\u2192REST": 5,
+        "FORWARD\u2192RIGHT": 1,
+        "LEFT\u2192RIGHT": 1,
+        "FORWARD\u2192LEFT": 3,
+        "LEFT\u2192REST": 1,
+        "LEFT\u2192FORWARD": 2,
+        "REST\u2192LEFT": 1,
+        "RIGHT\u2192REST": 1
+      },
+      "file_label": "subject3_ses1_run3",
+      "file_path": "D:\\STUDIA\\ZPB-antigravity\\data_organized\\subject3_ses1_run3_20251207_204045_raw.fif"
+    },
+    {
+      "mode": "triggered",
+      "strategy": "baseline",
+      "n_trials": 37,
+      "mi_accuracy": 0.649,
+      "per_class_accuracy": {
+        "RIGHT": 0.889,
+        "FORWARD": 0.6,
+        "LEFT": 0.556,
+        "REST": 0.556
+      },
+      "per_class_n_trials": {
+        "RIGHT": 9,
+        "FORWARD": 10,
+        "LEFT": 9,
+        "REST": 9
+      },
+      "avg_confidence": 0.681,
+      "confusion": {
+        "RIGHT\u2192REST": 1,
+        "FORWARD\u2192LEFT": 1,
+        "FORWARD\u2192FORWARD": 6,
+        "RIGHT\u2192RIGHT": 8,
+        "LEFT\u2192REST": 1,
+        "REST\u2192REST": 5,
+        "LEFT\u2192FORWARD": 3,
+        "REST\u2192FORWARD": 1,
+        "LEFT\u2192LEFT": 5,
+        "FORWARD\u2192RIGHT": 3,
+        "REST\u2192LEFT": 1,
+        "REST\u2192RIGHT": 2
+      },
+      "file_label": "subject3_ses1_run4",
+      "file_path": "D:\\STUDIA\\ZPB-antigravity\\data_organized\\subject3_ses1_run4_20251207_210156_raw.fif"
+    },
+    {
+      "mode": "triggered",
+      "strategy": "baseline",
+      "n_trials": 37,
+      "mi_accuracy": 0.541,
+      "per_class_accuracy": {
+        "RIGHT": 0.556,
+        "FORWARD": 0.4,
+        "LEFT": 0.444,
+        "REST": 0.778
+      },
+      "per_class_n_trials": {
+        "RIGHT": 9,
+        "FORWARD": 10,
+        "LEFT": 9,
+        "REST": 9
+      },
+      "avg_confidence": 0.709,
+      "confusion": {
+        "RIGHT\u2192REST": 2,
+        "FORWARD\u2192LEFT": 4,
+        "LEFT\u2192LEFT": 4,
+        "REST\u2192LEFT": 2,
+        "LEFT\u2192RIGHT": 3,
+        "FORWARD\u2192FORWARD": 4,
+        "RIGHT\u2192RIGHT": 5,
+        "LEFT\u2192FORWARD": 1,
+        "REST\u2192REST": 7,
+        "FORWARD\u2192RIGHT": 2,
+        "RIGHT\u2192LEFT": 1,
+        "LEFT\u2192REST": 1,
+        "RIGHT\u2192FORWARD": 1
+      },
+      "file_label": "subject3_ses2_run1",
+      "file_path": "D:\\STUDIA\\ZPB-antigravity\\data_organized\\subject3_ses2_run1_20251211_205847_raw.fif"
+    },
+    {
+      "mode": "triggered",
+      "strategy": "baseline",
+      "n_trials": 37,
+      "mi_accuracy": 0.514,
+      "per_class_accuracy": {
+        "LEFT": 0.5,
+        "REST": 0.333,
+        "RIGHT": 0.889,
+        "FORWARD": 0.333
+      },
+      "per_class_n_trials": {
+        "LEFT": 10,
+        "REST": 9,
+        "RIGHT": 9,
+        "FORWARD": 9
+      },
+      "avg_confidence": 0.709,
+      "confusion": {
+        "LEFT\u2192RIGHT": 3,
+        "REST\u2192RIGHT": 5,
+        "RIGHT\u2192RIGHT": 8,
+        "FORWARD\u2192RIGHT": 5,
+        "FORWARD\u2192FORWARD": 3,
+        "LEFT\u2192FORWARD": 1,
+        "REST\u2192REST": 3,
+        "LEFT\u2192LEFT": 5,
+        "FORWARD\u2192LEFT": 1,
+        "REST\u2192FORWARD": 1,
+        "RIGHT\u2192FORWARD": 1,
+        "LEFT\u2192REST": 1
+      },
+      "file_label": "subject3_ses2_run2",
+      "file_path": "D:\\STUDIA\\ZPB-antigravity\\data_organized\\subject3_ses2_run2_20251211_211514_raw.fif"
+    },
+    {
+      "mode": "triggered",
+      "strategy": "baseline",
+      "n_trials": 37,
+      "mi_accuracy": 0.73,
+      "per_class_accuracy": {
+        "FORWARD": 0.7,
+        "LEFT": 0.8,
+        "REST": 0.667,
+        "RIGHT": 0.75
+      },
+      "per_class_n_trials": {
+        "FORWARD": 10,
+        "LEFT": 10,
+        "REST": 9,
+        "RIGHT": 8
+      },
+      "avg_confidence": 0.647,
+      "confusion": {
+        "FORWARD\u2192REST": 1,
+        "LEFT\u2192LEFT": 8,
+        "FORWARD\u2192FORWARD": 7,
+        "REST\u2192RIGHT": 1,
+        "RIGHT\u2192RIGHT": 6,
+        "RIGHT\u2192REST": 2,
+        "LEFT\u2192FORWARD": 2,
+        "REST\u2192REST": 6,
+        "FORWARD\u2192LEFT": 1,
+        "REST\u2192FORWARD": 1,
+        "FORWARD\u2192RIGHT": 1,
+        "REST\u2192LEFT": 1
+      },
+      "file_label": "subject3_ses3_run1",
+      "file_path": "D:\\STUDIA\\ZPB-antigravity\\data_organized\\subject3_ses3_run1_20251217_204246_raw.fif"
+    },
+    {
+      "mode": "triggered",
+      "strategy": "baseline",
+      "n_trials": 37,
+      "mi_accuracy": 0.622,
+      "per_class_accuracy": {
+        "REST": 0.444,
+        "RIGHT": 0.8,
+        "FORWARD": 0.6,
+        "LEFT": 0.625
+      },
+      "per_class_n_trials": {
+        "REST": 9,
+        "RIGHT": 10,
+        "FORWARD": 10,
+        "LEFT": 8
+      },
+      "avg_confidence": 0.634,
+      "confusion": {
+        "REST\u2192RIGHT": 2,
+        "RIGHT\u2192RIGHT": 8,
+        "FORWARD\u2192RIGHT": 4,
+        "REST\u2192REST": 4,
+        "LEFT\u2192RIGHT": 2,
+        "LEFT\u2192LEFT": 5,
+        "REST\u2192FORWARD": 3,
+        "FORWARD\u2192FORWARD": 6,
+        "RIGHT\u2192REST": 1,
+        "LEFT\u2192REST": 1,
+        "RIGHT\u2192LEFT": 1
+      },
+      "file_label": "subject3_ses3_run2",
+      "file_path": "D:\\STUDIA\\ZPB-antigravity\\data_organized\\subject3_ses3_run2_20251217_212625_raw.fif"
+    },
+    {
+      "mode": "triggered",
+      "strategy": "baseline",
+      "n_trials": 37,
+      "mi_accuracy": 0.541,
+      "per_class_accuracy": {
+        "REST": 0.8,
+        "RIGHT": 0.111,
+        "FORWARD": 0.333,
+        "LEFT": 0.889
+      },
+      "per_class_n_trials": {
+        "REST": 10,
+        "RIGHT": 9,
+        "FORWARD": 9,
+        "LEFT": 9
+      },
+      "avg_confidence": 0.739,
+      "confusion": {
+        "REST\u2192LEFT": 1,
+        "RIGHT\u2192RIGHT": 1,
+        "FORWARD\u2192LEFT": 3,
+        "LEFT\u2192FORWARD": 1,
+        "REST\u2192REST": 8,
+        "RIGHT\u2192REST": 4,
+        "LEFT\u2192LEFT": 8,
+        "RIGHT\u2192FORWARD": 2,
+        "FORWARD\u2192RIGHT": 2,
+        "RIGHT\u2192LEFT": 2,
+        "REST\u2192FORWARD": 1,
+        "FORWARD\u2192FORWARD": 3,
+        "FORWARD\u2192REST": 1
+      },
+      "file_label": "subject3_ses4_run1",
+      "file_path": "D:\\STUDIA\\ZPB-antigravity\\data_organized\\subject3_ses4_run1_20260121_201053_raw.fif"
+    },
+    {
+      "mode": "triggered",
+      "strategy": "baseline",
+      "n_trials": 36,
+      "mi_accuracy": 0.639,
+      "per_class_accuracy": {
+        "REST": 0.9,
+        "FORWARD": 0.556,
+        "RIGHT": 0.444,
+        "LEFT": 0.625
+      },
+      "per_class_n_trials": {
+        "REST": 10,
+        "FORWARD": 9,
+        "RIGHT": 9,
+        "LEFT": 8
+      },
+      "avg_confidence": 0.753,
+      "confusion": {
+        "REST\u2192REST": 9,
+        "FORWARD\u2192FORWARD": 5,
+        "RIGHT\u2192REST": 2,
+        "LEFT\u2192REST": 2,
+        "FORWARD\u2192REST": 3,
+        "RIGHT\u2192FORWARD": 2,
+        "LEFT\u2192FORWARD": 1,
+        "RIGHT\u2192LEFT": 1,
+        "LEFT\u2192LEFT": 5,
+        "RIGHT\u2192RIGHT": 4,
+        "FORWARD\u2192LEFT": 1,
+        "REST\u2192LEFT": 1
+      },
+      "file_label": "subject3_ses4_run2",
+      "file_path": "D:\\STUDIA\\ZPB-antigravity\\data_organized\\subject3_ses4_run2_20260121_203257_raw.fif"
+    },
+    {
+      "mode": "triggered",
+      "strategy": "baseline",
+      "n_trials": 37,
+      "mi_accuracy": 0.703,
+      "per_class_accuracy": {
+        "FORWARD": 0.7,
+        "RIGHT": 0.4,
+        "REST": 0.75,
+        "LEFT": 1.0
+      },
+      "per_class_n_trials": {
+        "FORWARD": 10,
+        "RIGHT": 10,
+        "REST": 8,
+        "LEFT": 9
+      },
+      "avg_confidence": 0.65,
+      "confusion": {
+        "FORWARD\u2192LEFT": 3,
+        "RIGHT\u2192RIGHT": 4,
+        "RIGHT\u2192LEFT": 2,
+        "REST\u2192FORWARD": 2,
+        "LEFT\u2192LEFT": 9,
+        "FORWARD\u2192FORWARD": 7,
+        "REST\u2192REST": 6,
+        "RIGHT\u2192REST": 3,
+        "RIGHT\u2192FORWARD": 1
+      },
+      "file_label": "subject3_ses4_run3",
+      "file_path": "D:\\STUDIA\\ZPB-antigravity\\data_organized\\subject3_ses4_run3_20260121_210246_raw.fif"
+    }
+  ]
+}

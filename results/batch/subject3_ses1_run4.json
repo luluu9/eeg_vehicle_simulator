@@ -1,0 +1,35 @@
+{
+  "mode": "triggered",
+  "strategy": "baseline",
+  "n_trials": 37,
+  "mi_accuracy": 0.649,
+  "per_class_accuracy": {
+    "RIGHT": 0.889,
+    "FORWARD": 0.6,
+    "LEFT": 0.556,
+    "REST": 0.556
+  },
+  "per_class_n_trials": {
+    "RIGHT": 9,
+    "FORWARD": 10,
+    "LEFT": 9,
+    "REST": 9
+  },
+  "avg_confidence": 0.681,
+  "confusion": {
+    "RIGHT\u2192REST": 1,
+    "FORWARD\u2192LEFT": 1,
+    "FORWARD\u2192FORWARD": 6,
+    "RIGHT\u2192RIGHT": 8,
+    "LEFT\u2192REST": 1,
+    "REST\u2192REST": 5,
+    "LEFT\u2192FORWARD": 3,
+    "REST\u2192FORWARD": 1,
+    "LEFT\u2192LEFT": 5,
+    "FORWARD\u2192RIGHT": 3,
+    "REST\u2192LEFT": 1,
+    "REST\u2192RIGHT": 2
+  },
+  "file_label": "subject3_ses1_run4",
+  "file_path": "D:\\STUDIA\\ZPB-antigravity\\data_organized\\subject3_ses1_run4_20251207_210156_raw.fif"
+}
