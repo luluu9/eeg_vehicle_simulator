@@ -1,4 +1,5 @@
 import math
+import random
 import time
 import numpy as np
 import gymnasium as gym
@@ -121,8 +122,10 @@ class EvaluationSession:
 
     def _run_task_a(self, env, strategy, screen):
         clock = pygame.time.Clock()
+        goals = list(TASK_A_GOALS)
+        random.shuffle(goals)
 
-        for i, goal in enumerate(TASK_A_GOALS):
+        for i, goal in enumerate(goals):
             env.reset()
             start_state = get_wheelchair_state(env)
             self.metrics.start_trial()
