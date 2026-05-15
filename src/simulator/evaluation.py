@@ -3,11 +3,7 @@ import random
 import time
 import numpy as np
 import gymnasium as gym
-
-try:
-    import pygame
-except ImportError:
-    pygame = None
+import pygame
 
 from .input_handler import MultiStreamMonitor
 from .strategies import STUDY_STRATEGIES, REST_ACTION
@@ -26,6 +22,10 @@ _CUE_CY = 810
 _COLOR_CUE = (255, 255, 0)
 _COLOR_REST = (255, 255, 0)
 _COLOR_OUTLINE = (0, 100, 255)
+
+_WORLD_ZOOM = 8 * 6.0
+_WINDOW_W = 1920
+_WINDOW_H = 1080
 
 
 def _patch_pygame_flip():
@@ -70,26 +70,25 @@ def _draw_compass_arrow(screen, goal, start_state, current_state):
 
 def _draw_rest_circle(screen):
     cx, cy, r = _CUE_CX, _CUE_CY, _CUE_RADIUS
-    pygame.draw.circle(screen, _COLOR_REST, (cx, cy), r, 3)
-    pygame.draw.circle(screen, _COLOR_REST, (cx, cy), r // 3, 2)
+    pygame.draw.circle(screen, _COLOR_REST, (cx, cy), r // 2, 5)
+
+
+def _world_to_screen(wx, wy, car_x, car_y, car_angle):
+    cam_angle = -car_angle
+    v = pygame.math.Vector2(wx - car_x, wy - car_y).rotate_rad(cam_angle)
+    sx = v[0] * _WORLD_ZOOM + _WINDOW_W / 2
+    sy = v[1] * _WORLD_ZOOM + _WINDOW_H / 4
+    return int(sx), _WINDOW_H - int(sy)
 
 
 def _draw_forward_line(screen, goal, start_state, current_state):
-    cx, cy, r = _CUE_CX, _CUE_CY, _CUE_RADIUS
-    dx = current_state.x - start_state.x
-    dy = current_state.y - start_state.y
-    dist = math.sqrt(dx * dx + dy * dy)
-    progress = min(dist / goal.target_value, 1.0)
-
-    pygame.draw.circle(screen, _COLOR_OUTLINE, (cx, cy), r, 2)
-
-    goal_y = int(cy - r * 0.7)
-    hw = int(math.sqrt(max(r * r - (goal_y - cy) ** 2, 0)))
-    pygame.draw.line(screen, _COLOR_CUE, (cx - hw, goal_y), (cx + hw, goal_y), 3)
-
-    start_y = cy + int(r * 0.5)
-    dot_y = int(start_y - (start_y - goal_y) * progress)
-    pygame.draw.circle(screen, _COLOR_CUE, (cx, dot_y), 6)
+    radius_world = goal.target_value
+    radius_px = int(radius_world * _WORLD_ZOOM)
+    center = _world_to_screen(
+        start_state.x, start_state.y,
+        current_state.x, current_state.y, current_state.angle,
+    )
+    pygame.draw.circle(screen, _COLOR_CUE, center, radius_px, 3)
 
 
 class EvaluationSession:
