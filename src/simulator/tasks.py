@@ -142,16 +142,17 @@ class TrajectoryTask:
 
 
 def create_default_trajectory() -> TrajectoryTask:
-    spacing = 5.0
-    side = 30.0
-    n = int(side / spacing)
+    spacing = 3.0
     waypoints = []
-    for i in range(1, n + 1):
+    # Segment 1: Forward (up) - requires forward
+    for i in range(1, 6):
         waypoints.append(Waypoint(0, i * spacing))
-    for i in range(1, n + 1):
-        waypoints.append(Waypoint(-i * spacing, side))
-    for i in range(1, n + 1):
-        waypoints.append(Waypoint(-side, side - i * spacing))
-    for i in range(1, n + 1):
-        waypoints.append(Waypoint(-side + i * spacing, 0))
+    # Segment 2: Right - requires right turn + forward
+    top = 5 * spacing
+    for i in range(1, 6):
+        waypoints.append(Waypoint(i * spacing, top))
+    # Segment 3: Up again - requires left turn + forward
+    right_x = 5 * spacing
+    for i in range(1, 6):
+        waypoints.append(Waypoint(right_x, top + i * spacing))
     return TrajectoryTask(waypoints)

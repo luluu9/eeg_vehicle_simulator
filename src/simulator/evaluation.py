@@ -91,6 +91,61 @@ def _draw_forward_line(screen, goal, start_state, current_state):
     pygame.draw.circle(screen, _COLOR_CUE, center, radius_px, 3)
 
 
+_PATH_COLOR = (80, 80, 80)
+_PATH_EDGE_COLOR = (140, 140, 140)
+_PATH_WIDTH = 4.0
+
+
+def _world_to_surf(wx, wy, zoom, translation, angle):
+    v = pygame.math.Vector2(wx, wy).rotate_rad(angle)
+    return (v[0] * zoom + translation[0], v[1] * zoom + translation[1])
+
+
+def _draw_path_on_surf(surf, trajectory, zoom, translation, angle):
+    wps = trajectory.waypoints
+    if len(wps) < 2:
+        return
+
+    half_w = _PATH_WIDTH * zoom / 2
+
+    for i in range(len(wps) - 1):
+        p1 = _world_to_surf(wps[i].x, wps[i].y, zoom, translation, angle)
+        p2 = _world_to_surf(wps[i + 1].x, wps[i + 1].y, zoom, translation, angle)
+
+        dx = p2[0] - p1[0]
+        dy = p2[1] - p1[1]
+        length = math.sqrt(dx * dx + dy * dy)
+        if length < 1:
+            continue
+        nx = -dy / length * half_w
+        ny = dx / length * half_w
+
+        quad = [
+            (p1[0] + nx, p1[1] + ny),
+            (p2[0] + nx, p2[1] + ny),
+            (p2[0] - nx, p2[1] - ny),
+            (p1[0] - nx, p1[1] - ny),
+        ]
+
+        color = _PATH_COLOR if i < trajectory.current_idx else _PATH_EDGE_COLOR
+        pygame.draw.polygon(surf, color, quad)
+
+
+def _install_path_renderer(env, trajectory):
+    car = env.unwrapped.car
+    original_draw = car.draw.__func__ if hasattr(car.draw, '__func__') else None
+
+    def patched_draw(self, surf, zoom, trans, angle, draw_particles=True):
+        _draw_path_on_surf(surf, trajectory, zoom, trans, angle)
+        if original_draw:
+            original_draw(self, surf, zoom, trans, angle, draw_particles)
+        else:
+            type(car).draw(self, surf, zoom, trans, angle, draw_particles)
+
+    import types
+    car.draw = types.MethodType(patched_draw, car)
+
+
 class EvaluationSession:
     def __init__(self, strategy_name: str, task_name: str):
         self.strategy_name = strategy_name
@@ -168,6 +223,7 @@ class EvaluationSession:
         clock = pygame.time.Clock()
         trajectory = create_default_trajectory()
         env.reset()
+        _install_path_renderer(env, trajectory)
         self.metrics.start_trial()
         elapsed = 0.0
 
@@ -229,13 +285,9 @@ class EvaluationSession:
 
     @staticmethod
     def _render_trajectory_overlay(screen, trajectory, elapsed):
-        font = pygame.font.SysFont("Arial", 32)
-        lines = [
-            f"Trajectory:  {trajectory.progress:.0%}  ({trajectory.current_idx}/{len(trajectory.waypoints)})",
-            f"Time: {elapsed:.1f}s / {trajectory.TIME_LIMIT:.0f}s",
-        ]
-        y = 20
-        for line in lines:
-            surf = font.render(line, True, (255, 255, 255))
-            screen.blit(surf, (20, y))
-            y += 40
+        font = pygame.font.SysFont("Arial", 24)
+        text = font.render(
+            f"{trajectory.progress:.0%}  |  {elapsed:.0f}s",
+            True, (180, 180, 180),
+        )
+        screen.blit(text, (20, 20))
