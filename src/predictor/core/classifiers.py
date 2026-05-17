@@ -21,6 +21,28 @@ from ...common.constants import StudyClass
 
 N_LEGACY_CLASSES = 5
 N_STUDY_CLASSES = 4
+PREDICTOR_EVENT_NAMES = ["relax", "left_hand", "right_hand", "both_feets"]
+LEGACY_TO_STUDY_CLASS = {
+    1: StudyClass.REST.value,
+    2: StudyClass.LEFT.value,
+    3: StudyClass.RIGHT.value,
+    5: StudyClass.FORWARD.value,
+}
+
+
+def _map_legacy_probs_to_study(classes: np.ndarray, probs: np.ndarray) -> np.ndarray:
+    full_probs = np.zeros(N_STUDY_CLASSES, dtype=float)
+
+    for cls, prob in zip(classes, probs):
+        mapped_idx = LEGACY_TO_STUDY_CLASS.get(int(cls))
+        if mapped_idx is not None:
+            full_probs[mapped_idx] = prob
+
+    total = float(full_probs.sum())
+    if total > 0.0:
+        full_probs /= total
+
+    return full_probs
 
 class BaseClassifier(ABC):
     def __init__(self):
@@ -36,19 +58,23 @@ class BaseClassifier(ABC):
     def max_window(self) -> float:
         """Maximum supported window duration in seconds."""
         return self._max_window
+
+    @property
+    def output_size(self) -> int:
+        return N_STUDY_CLASSES
         
     @abstractmethod
     def predict_proba(self, data: np.ndarray, fs: float) -> np.ndarray:
         """
         Predict probabilities for the class set:
-        [Relax, Left, Right, Both, Feet]
+        [Rest, Left, Right, Forward]
         
         Args:
             data: EEG data (n_channels, n_samples)
             fs: Sampling rate of the data
             
         Returns:
-            np.ndarray: Probabilities array of shape (5,)
+            np.ndarray: Probabilities array of shape (4,)
         """
         pass
     
@@ -70,7 +96,7 @@ class MockClassifier(BaseClassifier):
         
     def predict_proba(self, data: np.ndarray, fs: float) -> np.ndarray:
         # Return random probabilities normalized to sum 1
-        probs = np.random.dirichlet(np.ones(5), size=1)[0]
+        probs = np.random.dirichlet(np.ones(self.output_size), size=1)[0]
         return probs
 
 class CSPSVMClassifier(BaseClassifier):
@@ -108,7 +134,7 @@ class CSPSVMClassifier(BaseClassifier):
             #'mati_imagery3_run2_20251217_212624_raw.fif'
         ]
         training_data = [data_dir / data_path for data_path in training_data]
-        target_events = ["relax", "left_hand", "right_hand", "both_hands", "both_feets"]
+        target_events = PREDICTOR_EVENT_NAMES
 
         epoch_segment = 2.0
         epoch_step = 1.0
@@ -140,15 +166,11 @@ class CSPSVMClassifier(BaseClassifier):
         try:
             probs = self.model.predict_proba(X)[0] 
             classes = self.model.classes_ # e.g. [1, 2] or [2, 3, 4, 5], where 1=Relax, 2=Left, etc.
-            
-            # Map to standard vector of size 5 even if the model has different number of classes
-            # classes-1 because the classes are 1-based, and we want 0-based indexing
-            full_probs = np.zeros(5)
-            full_probs[classes-1] = probs
-            return full_probs
+
+            return _map_legacy_probs_to_study(classes, probs)
         except Exception as e:
             print(f"Prediction error: {e}")
-            return np.zeros(5)
+            return np.zeros(self.output_size)
 
 class GroundTruthClassifier(BaseClassifier):
     def __init__(self):
@@ -208,7 +230,8 @@ class GroundTruthClassifier(BaseClassifier):
                     if delay > 0:
                         time.sleep(delay)
                         
-                    # We expect exactly 5 channels corresponding to '1'..'5' which map 1:1 to Relax(0)..Feet(4)
+                    # Legacy annotations may still arrive as a 5-channel one-hot vector.
+                    # We map that to the 4-class study output by dropping both_hands.
                     # sample is a list of floats, e.g. [0, 1, 0, 0, 0]
                     # We accept 1 or -1 as active
                     arr = np.abs(np.array(sample))
@@ -223,12 +246,13 @@ class GroundTruthClassifier(BaseClassifier):
 
     def predict_proba(self, data: np.ndarray, fs: float) -> np.ndarray:
         # Ignore EEG data, return ground truth
-        probs = np.zeros(5)
-        if 0 <= self.latest_label_idx < 5:
-            probs[self.latest_label_idx] = 1.0
+        legacy_probs = np.zeros(N_LEGACY_CLASSES)
+        if 0 <= self.latest_label_idx < N_LEGACY_CLASSES:
+            legacy_probs[self.latest_label_idx] = 1.0
+            return _map_legacy_probs_to_study(np.arange(1, N_LEGACY_CLASSES + 1), legacy_probs)
         else:
             print(f"GroundTruth: Invalid label index: {self.latest_label_idx}")
-        return probs
+        return np.zeros(self.output_size)
 
 class TGSPClassifier(BaseClassifier):
     def __init__(self, model_path: str):
@@ -265,7 +289,7 @@ class TGSPClassifier(BaseClassifier):
             #'mati_imagery3_run2_20251217_212624_raw.fif'
         ]
         training_data = [data_dir / data_path for data_path in training_data]
-        target_events = ["relax", "left_hand", "right_hand", "both_hands", "both_feets"]
+        target_events = PREDICTOR_EVENT_NAMES
 
         epoch_segment = 2.0
         epoch_step = 1.0
@@ -295,15 +319,11 @@ class TGSPClassifier(BaseClassifier):
         try:
             probs = self.model.predict_proba(X)[0] 
             classes = self.model.classes_ # e.g. [1, 2] or [2, 3, 4, 5], where 1=Relax, 2=Left, etc.
-            
-            # Map to standard vector of size 5 even if the model has different number of classes
-            # classes-1 because the classes are 1-based, and we want 0-based indexing
-            full_probs = np.zeros(5)
-            full_probs[classes-1] = probs
-            return full_probs
+
+            return _map_legacy_probs_to_study(classes, probs)
         except Exception as e:
             print(f"Prediction error: {e}")
-            return np.zeros(5)
+            return np.zeros(self.output_size)
 
 
 class StudyMIClassifier(BaseClassifier):
@@ -326,12 +346,7 @@ class StudyMIClassifier(BaseClassifier):
         try:
             probs = self.model.predict_proba(X)[0]
             classes = self.model.classes_
-            full_probs = np.zeros(N_STUDY_CLASSES)
-            for i, cls in enumerate(classes):
-                idx = cls - 1
-                if 0 <= idx < N_STUDY_CLASSES:
-                    full_probs[idx] = probs[i]
-            return full_probs
+            return _map_legacy_probs_to_study(classes, probs)
         except Exception as e:
             print(f"StudyMI prediction error: {e}")
             return np.zeros(N_STUDY_CLASSES)

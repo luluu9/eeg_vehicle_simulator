@@ -5,7 +5,11 @@ import pyqtgraph as pg
 import numpy as np
 from ..core.engine import PredictorEngine
 from ..core.classifiers import GroundTruthClassifier
-from ...common.constants import LSLChannel
+from ...common.constants import StudyClass
+
+
+PREDICTOR_CLASS_NAMES = [study_class.name for study_class in StudyClass]
+PREDICTOR_CLASS_COLORS = ['g', 'r', 'b', 'c']
 
 class ClassifierWidget(QGroupBox):
     def __init__(self, name: str, min_w: float, max_w: float, engine: PredictorEngine):
@@ -52,11 +56,11 @@ class ClassifierWidget(QGroupBox):
         # 1. Bar Chart (Current)
         self.bar_plot = pg.PlotWidget()
         self.bar_plot.setMaximumWidth(200)
-        self.bar_items = pg.BarGraphItem(x=range(5), height=[0]*5, width=0.6, brush='b')
+        self.bar_items = pg.BarGraphItem(x=range(len(PREDICTOR_CLASS_NAMES)), height=[0] * len(PREDICTOR_CLASS_NAMES), width=0.6, brush='b')
         self.bar_plot.addItem(self.bar_items)
         # Fix axis
         self.bar_plot.setYRange(0, 1)
-        self.bar_plot.getAxis('bottom').setTicks([list(zip(range(5), LSLChannel.names()))])
+        self.bar_plot.getAxis('bottom').setTicks([list(zip(range(len(PREDICTOR_CLASS_NAMES)), PREDICTOR_CLASS_NAMES))])
         viz_layout.addWidget(self.bar_plot)
         
         # 2. History Line Chart
@@ -65,9 +69,8 @@ class ClassifierWidget(QGroupBox):
         self.history_plot.showGrid(x=True, y=True)
         self.history_plot.addLegend()
         self.lines = {}
-        colors = ['g', 'r', 'b', 'c', 'm'] # Relax, Left, Right, Both, Feet
-        for idx, name in enumerate(LSLChannel.names()):
-            self.lines[name] = self.history_plot.plot(pen=colors[idx], name=name)
+        for idx, name in enumerate(PREDICTOR_CLASS_NAMES):
+            self.lines[name] = self.history_plot.plot(pen=PREDICTOR_CLASS_COLORS[idx], name=name)
             
         viz_layout.addWidget(self.history_plot)
         
@@ -75,7 +78,7 @@ class ClassifierWidget(QGroupBox):
         self.setLayout(layout)
         
         # Data storage for history
-        self.history_data = {name: [] for name in LSLChannel.names()}
+        self.history_data = {name: [] for name in PREDICTOR_CLASS_NAMES}
         self.visible_history = 100
         self.buffer_size = 500
         
@@ -103,7 +106,7 @@ class ClassifierWidget(QGroupBox):
              self.latency_label.setStyleSheet("color: green")
         
         # Update History Buffer
-        for i, name in enumerate(LSLChannel.names()):
+        for i, name in enumerate(PREDICTOR_CLASS_NAMES):
             self.history_data[name].append(probs[i])
             if len(self.history_data[name]) > self.buffer_size:
                 self.history_data[name].pop(0)
@@ -115,7 +118,7 @@ class ClassifierWidget(QGroupBox):
         self._refresh_lines()
         
     def _refresh_lines(self):
-        for name in LSLChannel.names():
+        for name in PREDICTOR_CLASS_NAMES:
             data = self.history_data[name]
             # Show only last N points
             if len(data) > self.visible_history:

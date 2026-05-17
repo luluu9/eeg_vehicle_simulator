@@ -8,7 +8,7 @@ import numpy as np
 class ClassifierState:
     def __init__(self, classifier: BaseClassifier):
         self.classifier = classifier
-        self.broadcaster = PredictionBroadcaster(classifier.name)
+        self.broadcaster = PredictionBroadcaster(classifier.name, channel_count=classifier.output_size)
         # Default target to min or reasonable middle
         self.target_window = classifier.min_window
         self.active = True
