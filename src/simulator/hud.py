@@ -8,6 +8,10 @@ class HUD:
         self.font = pygame.font.SysFont("Arial", 18)
         self.big_font = pygame.font.SysFont("Arial", 24, bold=True)
         self.debug_mode = False
+
+    def resize(self, width, height):
+        self.width = width
+        self.height = height
         
     def toggle_debug(self):
         self.debug_mode = not self.debug_mode

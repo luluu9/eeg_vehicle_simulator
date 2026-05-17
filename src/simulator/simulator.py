@@ -37,6 +37,12 @@ def main():
     while not done:
         # 1. Get Data
         all_probs = monitor.get_probabilities()
+
+        screen = pygame.display.get_surface()
+        if screen is not None:
+            width, height = screen.get_size()
+            if (width, height) != (hud.width, hud.height):
+                hud.resize(width, height)
         
         # 2. Handle Inputs
         for event in pygame.event.get():
@@ -86,6 +92,7 @@ def main():
         done = terminated or truncated
         
         # 5. Render HUD
+        screen = pygame.display.get_surface()
         hud.render(screen, all_probs, strategy_mgr, action)
 
         pygame_flip()
