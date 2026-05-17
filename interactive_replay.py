@@ -8,7 +8,7 @@ import sys
 import os
 
 # Configuration
-DEFAULT_FILE = r"data/mati_imagery_2_run1_20251207_190808_raw.fif"
+DEFAULT_FILE = r"data_organized\subject3_ses4_run3_20260121_210246_raw.fif"
 STREAM_NAME = "test-player"
 DEBUG_FILE = False
 

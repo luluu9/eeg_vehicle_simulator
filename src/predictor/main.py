@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import QApplication
 from .ui.main_window import PredictorWindow
 import os
 import glob
-from .core.classifiers import CSPSVMClassifier, TGSPClassifier
+from .core.classifiers import CSPSVMClassifier, TGSPClassifier, StudyMIClassifier
 
 def main():
     app = QApplication(sys.argv)
@@ -17,6 +17,10 @@ def main():
         try:
             if p in seen_names: continue
             # Just a heuristic to guess it's a model we can load
+            if "mi_tslr" in p.lower() or "studymi" in p.lower():
+                seen_names.add(p)
+                clf = StudyMIClassifier(p)
+                window.add_classifier_ui(clf)
             if "csp" in p.lower() or "svm" in p.lower():
                 seen_names.add(p)
                 clf = CSPSVMClassifier(p)

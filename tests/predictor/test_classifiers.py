@@ -5,6 +5,7 @@ from src.predictor.core.classifiers import (
     GroundTruthClassifier,
     MockClassifier,
     _map_legacy_probs_to_study,
+    _map_model_probs_to_study,
 )
 
 
@@ -35,6 +36,16 @@ class TestLegacyProbabilityMapping:
         mapped = _map_legacy_probs_to_study(classes, probs)
 
         np.testing.assert_array_equal(mapped, np.zeros(4))
+
+
+class TestModelProbabilityMapping:
+    def test_preserves_direct_study_class_indices(self):
+        classes = np.array([1, 2, 3, 4])
+        probs = np.array([0.1, 0.2, 0.3, 0.4])
+
+        mapped = _map_model_probs_to_study(classes, probs)
+
+        np.testing.assert_allclose(mapped, probs)
 
 
 class TestGroundTruthClassifier:

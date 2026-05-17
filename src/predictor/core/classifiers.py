@@ -44,6 +44,25 @@ def _map_legacy_probs_to_study(classes: np.ndarray, probs: np.ndarray) -> np.nda
 
     return full_probs
 
+
+def _map_model_probs_to_study(classes: np.ndarray, probs: np.ndarray) -> np.ndarray:
+    class_values = {int(cls) for cls in classes}
+
+    if class_values.issubset({1, 2, 3, 4}):
+        full_probs = np.zeros(N_STUDY_CLASSES, dtype=float)
+        for cls, prob in zip(classes, probs):
+            idx = int(cls) - 1
+            if 0 <= idx < N_STUDY_CLASSES:
+                full_probs[idx] = prob
+
+        total = float(full_probs.sum())
+        if total > 0.0:
+            full_probs /= total
+
+        return full_probs
+
+    return _map_legacy_probs_to_study(classes, probs)
+
 class BaseClassifier(ABC):
     def __init__(self):
         self._min_window = 1.0 # Default
@@ -167,7 +186,7 @@ class CSPSVMClassifier(BaseClassifier):
             probs = self.model.predict_proba(X)[0] 
             classes = self.model.classes_ # e.g. [1, 2] or [2, 3, 4, 5], where 1=Relax, 2=Left, etc.
 
-            return _map_legacy_probs_to_study(classes, probs)
+            return _map_model_probs_to_study(classes, probs)
         except Exception as e:
             print(f"Prediction error: {e}")
             return np.zeros(self.output_size)
@@ -320,7 +339,7 @@ class TGSPClassifier(BaseClassifier):
             probs = self.model.predict_proba(X)[0] 
             classes = self.model.classes_ # e.g. [1, 2] or [2, 3, 4, 5], where 1=Relax, 2=Left, etc.
 
-            return _map_legacy_probs_to_study(classes, probs)
+            return _map_model_probs_to_study(classes, probs)
         except Exception as e:
             print(f"Prediction error: {e}")
             return np.zeros(self.output_size)
@@ -346,7 +365,7 @@ class StudyMIClassifier(BaseClassifier):
         try:
             probs = self.model.predict_proba(X)[0]
             classes = self.model.classes_
-            return _map_legacy_probs_to_study(classes, probs)
+            return _map_model_probs_to_study(classes, probs)
         except Exception as e:
             print(f"StudyMI prediction error: {e}")
             return np.zeros(N_STUDY_CLASSES)
