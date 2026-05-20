@@ -16,7 +16,6 @@ class GoalType(Enum):
 class Goal:
     goal_type: GoalType
     target_value: float  # degrees for turn, meters for move, seconds for rest
-    tolerance: float     # degrees or meters
     timeout: float = 60.0
 
 
@@ -60,24 +59,21 @@ class GoalChecker:
         if goal.goal_type == GoalType.TURN_LEFT:
             delta = _normalize_angle(current.angle - start.angle)
             target_rad = math.radians(goal.target_value)
-            return abs(delta - target_rad) <= math.radians(goal.tolerance)
+            return delta >= target_rad
 
         elif goal.goal_type == GoalType.TURN_RIGHT:
             delta = _normalize_angle(current.angle - start.angle)
             target_rad = -math.radians(goal.target_value)
-            return abs(delta - target_rad) <= math.radians(goal.tolerance)
+            return delta <= target_rad
 
         elif goal.goal_type == GoalType.MOVE_FORWARD:
             dx = current.x - start.x
             dy = current.y - start.y
             dist = math.sqrt(dx * dx + dy * dy)
-            return dist >= goal.target_value - goal.tolerance
+            return dist >= goal.target_value
 
         elif goal.goal_type == GoalType.REST:
-            dx = current.x - start.x
-            dy = current.y - start.y
-            dist = math.sqrt(dx * dx + dy * dy)
-            return dist <= goal.tolerance and elapsed >= goal.target_value
+            return elapsed >= goal.target_value
 
         return False
 
@@ -91,10 +87,10 @@ class GoalChecker:
 
 
 TASK_A_GOALS = [
-    Goal(GoalType.TURN_LEFT, target_value=90, tolerance=15, timeout=60),
-    Goal(GoalType.MOVE_FORWARD, target_value=5 * WHEELCHAIR_LENGTH, tolerance=0.5 * WHEELCHAIR_LENGTH, timeout=60),
-    Goal(GoalType.REST, target_value=5, tolerance=0.3, timeout=15),
-    Goal(GoalType.TURN_RIGHT, target_value=90, tolerance=15, timeout=60),
+    Goal(GoalType.TURN_LEFT, target_value=90, timeout=60),
+    Goal(GoalType.MOVE_FORWARD, target_value=5 * WHEELCHAIR_LENGTH, timeout=60),
+    Goal(GoalType.REST, target_value=5, timeout=15),
+    Goal(GoalType.TURN_RIGHT, target_value=90, timeout=60),
 ]
 
 
