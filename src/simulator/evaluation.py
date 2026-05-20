@@ -13,20 +13,18 @@ from .tasks import (
     get_wheelchair_state, create_default_trajectory, _normalize_angle,
 )
 from gymnasium.envs.box2d.wheelchair_dynamics import WHEELCHAIR_WIDTH
+from gymnasium.envs.box2d.wheelchair_racing import (
+    WHEELCHAIR_CENTER_X_RATIO, WHEELCHAIR_CENTER_Y_RATIO,
+    WINDOW_W, WINDOW_H, ZOOM, SCALE,
+)
 
 
 pygame_flip_original = None
 
 _CUE_RADIUS = 60
-_CUE_CX = 960
-_CUE_CY = 810
 _COLOR_CUE = (255, 255, 0)
 _COLOR_REST = (255, 255, 0)
 _COLOR_OUTLINE = (0, 100, 255)
-
-_WORLD_ZOOM = 8 * 6.0
-_WINDOW_W = 1920
-_WINDOW_H = 1080
 
 
 def _patch_pygame_flip():
@@ -42,7 +40,9 @@ def _flip():
 
 
 def _draw_compass_arrow(screen, goal, start_state, current_state):
-    cx, cy, r = _CUE_CX, _CUE_CY, _CUE_RADIUS
+    sw, sh = screen.get_size()
+    cx, cy = int(sw * WHEELCHAIR_CENTER_X_RATIO), int(sh * WHEELCHAIR_CENTER_Y_RATIO)
+    r = max(20, int(_CUE_RADIUS * sh / WINDOW_H))
     delta = _normalize_angle(current_state.angle - start_state.angle)
     if goal.goal_type == GoalType.TURN_LEFT:
         target = math.radians(goal.target_value)
@@ -70,24 +70,30 @@ def _draw_compass_arrow(screen, goal, start_state, current_state):
 
 
 def _draw_rest_circle(screen):
-    cx, cy, r = _CUE_CX, _CUE_CY, _CUE_RADIUS
+    sw, sh = screen.get_size()
+    cx, cy = int(sw * WHEELCHAIR_CENTER_X_RATIO), int(sh * WHEELCHAIR_CENTER_Y_RATIO)
+    r = max(20, int(_CUE_RADIUS * sh / WINDOW_H))
     pygame.draw.circle(screen, _COLOR_REST, (cx, cy), r // 2, 5)
 
 
-def _world_to_screen(wx, wy, car_x, car_y, car_angle):
+def _world_to_screen(wx, wy, car_x, car_y, car_angle, screen):
+    sw, sh = screen.get_size()
+    zoom_x = ZOOM * SCALE * sw / WINDOW_W
+    zoom_y = ZOOM * SCALE * sh / WINDOW_H
     cam_angle = -car_angle
     v = pygame.math.Vector2(wx - car_x, wy - car_y).rotate_rad(cam_angle)
-    sx = v[0] * _WORLD_ZOOM + _WINDOW_W / 2
-    sy = v[1] * _WORLD_ZOOM + _WINDOW_H / 4
-    return int(sx), _WINDOW_H - int(sy)
+    sx = v[0] * zoom_x + sw / 2
+    sy_pre = v[1] * zoom_y + sh / 4
+    return int(sx), sh - int(sy_pre)
 
 
 def _draw_forward_line(screen, goal, start_state, current_state):
-    radius_world = goal.target_value
-    radius_px = int(radius_world * _WORLD_ZOOM)
+    sw, sh = screen.get_size()
+    zoom_x = ZOOM * SCALE * sw / WINDOW_W
+    radius_px = int(goal.target_value * zoom_x)
     center = _world_to_screen(
         start_state.x, start_state.y,
-        current_state.x, current_state.y, current_state.angle,
+        current_state.x, current_state.y, current_state.angle, screen,
     )
     pygame.draw.circle(screen, _COLOR_CUE, center, radius_px, 3)
 
