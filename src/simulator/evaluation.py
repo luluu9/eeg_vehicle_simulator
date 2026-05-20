@@ -76,11 +76,14 @@ def _draw_compass_arrow(screen, goal, start_state, current_state):
     ])
 
 
-def _draw_rest_circle(screen):
+def _draw_rest_circle(screen, elapsed: float, target_value: float):
     sw, sh = screen.get_size()
     cx, cy = int(sw * WHEELCHAIR_CENTER_X_RATIO), int(sh * WHEELCHAIR_CENTER_Y_RATIO)
     r = max(20, int(_CUE_RADIUS * sh / WINDOW_H))
-    pygame.draw.circle(screen, _COLOR_REST, (cx, cy), r // 2, 5)
+    progress = min(elapsed / target_value, 1.0) if target_value > 0 else 1.0
+    min_r = max(4, int(r * 0.075))
+    current_r = max(min_r, int(r * (1.0 - progress)))
+    pygame.draw.circle(screen, _COLOR_REST, (cx, cy), current_r, 3)
 
 
 def _world_to_screen(wx, wy, car_x, car_y, car_angle, screen):
@@ -262,6 +265,7 @@ class EvaluationSession:
                 return
             self.metrics.start_trial()
             elapsed = 0.0
+            rest_accumulated = 0.0
             completed = False
             running = True
             clock.tick()  # discard time accumulated during countdown
@@ -278,6 +282,9 @@ class EvaluationSession:
                 stream = self._pick_stream(mi_probs)
                 action = strategy.compute(mi_probs, stream, errp_data) if stream else REST_ACTION.copy()
 
+                if np.array_equal(action, REST_ACTION):
+                    rest_accumulated += dt
+
                 env.step(action)
                 state = get_wheelchair_state(env)
                 self.metrics.record_position(state.x, state.y)
@@ -286,13 +293,14 @@ class EvaluationSession:
                     while self.metrics._correction_count < strategy.correction_count:
                         self.metrics.record_correction()
 
-                if GoalChecker.check(goal, start_state, state, elapsed):
+                check_elapsed = rest_accumulated if goal.goal_type == GoalType.REST else elapsed
+                if GoalChecker.check(goal, start_state, state, check_elapsed):
                     completed = True
                     running = False
                 if elapsed >= goal.timeout:
                     running = False
 
-                self._render_goal_cue(screen, goal, i, elapsed, start_state, state)
+                self._render_goal_cue(screen, goal, i, elapsed, start_state, state, rest_accumulated)
                 _flip()
 
             optimal = GoalChecker.optimal_path_length(goal)
@@ -357,7 +365,7 @@ class EvaluationSession:
                 if goal.goal_type in (GoalType.TURN_LEFT, GoalType.TURN_RIGHT):
                     _draw_compass_arrow(screen, goal, start_state, state)
                 elif goal.goal_type == GoalType.REST:
-                    _draw_rest_circle(screen)
+                    _draw_rest_circle(screen, 0.0, goal.target_value)
                 elif goal.goal_type == GoalType.MOVE_FORWARD:
                     _draw_forward_line(screen, goal, start_state, state)
                 _draw_countdown_digit(screen, count)
@@ -375,11 +383,11 @@ class EvaluationSession:
         return True
 
     @staticmethod
-    def _render_goal_cue(screen, goal, trial_idx, elapsed, start_state, current_state):
+    def _render_goal_cue(screen, goal, trial_idx, elapsed, start_state, current_state, rest_accumulated=0.0):
         if goal.goal_type in (GoalType.TURN_LEFT, GoalType.TURN_RIGHT):
             _draw_compass_arrow(screen, goal, start_state, current_state)
         elif goal.goal_type == GoalType.REST:
-            _draw_rest_circle(screen)
+            _draw_rest_circle(screen, rest_accumulated, goal.target_value)
         elif goal.goal_type == GoalType.MOVE_FORWARD:
             _draw_forward_line(screen, goal, start_state, current_state)
 

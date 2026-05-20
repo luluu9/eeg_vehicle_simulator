@@ -87,10 +87,10 @@ class GoalChecker:
 
 
 TASK_A_GOALS = [
-    Goal(GoalType.TURN_LEFT, target_value=90, timeout=60),
-    Goal(GoalType.MOVE_FORWARD, target_value=5 * WHEELCHAIR_LENGTH, timeout=60),
-    Goal(GoalType.REST, target_value=5, timeout=15),
-    Goal(GoalType.TURN_RIGHT, target_value=90, timeout=60),
+    # Goal(GoalType.TURN_LEFT, target_value=90, timeout=60),
+    # Goal(GoalType.MOVE_FORWARD, target_value=5 * WHEELCHAIR_LENGTH, timeout=60),
+    Goal(GoalType.REST, target_value=15, timeout=60),
+    # Goal(GoalType.TURN_RIGHT, target_value=90, timeout=60),
 ]
 
 
