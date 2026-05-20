@@ -53,23 +53,6 @@ def frame_to_pixmap(frame: np.ndarray) -> QPixmap:
     return QPixmap.fromImage(image)
 
 
-def draw_fixation_cross(pixmap: QPixmap) -> QPixmap:
-    result = pixmap.copy()
-    painter = QPainter(result)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-    cx = int(result.width() * WHEELCHAIR_CENTER_X_RATIO)
-    cy = int(result.height() * WHEELCHAIR_CENTER_Y_RATIO)
-    size = 20
-    pen = QPen(QColor(0, 100, 255), 3)
-    painter.setPen(pen)
-    painter.drawLine(cx - size, cy, cx + size, cy)
-    painter.drawLine(cx, cy - size, cx, cy + size)
-
-    painter.end()
-    return result
-
-
 def draw_cue_overlay(pixmap: QPixmap, task: TaskType) -> QPixmap:
     result = pixmap.copy()
     painter = QPainter(result)
@@ -170,8 +153,6 @@ class StimulusWindow(QWidget):
         pixmap = frame_to_pixmap(frame)
         if self._overlay_task is not None:
             pixmap = draw_cue_overlay(pixmap, self._overlay_task)
-        else:
-            pixmap = draw_fixation_cross(pixmap)
         if self._feedback_border is not None:
             pixmap = draw_feedback_border(pixmap, self._feedback_border)
         self._set_pixmap(pixmap)
