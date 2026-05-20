@@ -12,6 +12,7 @@ from .tasks import (
     TASK_A_GOALS, GoalChecker, GoalType, TrajectoryTask, Waypoint,
     get_wheelchair_state, create_default_trajectory, _normalize_angle,
 )
+from gymnasium.envs.box2d.wheelchair_dynamics import WHEELCHAIR_WIDTH
 
 
 pygame_flip_original = None
@@ -93,7 +94,7 @@ def _draw_forward_line(screen, goal, start_state, current_state):
 
 _PATH_COLOR = (80, 80, 80)
 _PATH_EDGE_COLOR = (140, 140, 140)
-_PATH_WIDTH = 4.0
+_PATH_WIDTH = 2 * WHEELCHAIR_WIDTH
 
 
 def _world_to_surf(wx, wy, zoom, translation, angle):

@@ -2,6 +2,8 @@ import math
 from enum import Enum
 from dataclasses import dataclass
 
+from gymnasium.envs.box2d.wheelchair_dynamics import WHEELCHAIR_LENGTH
+
 
 class GoalType(Enum):
     TURN_LEFT = "turn_left"
@@ -90,7 +92,7 @@ class GoalChecker:
 
 TASK_A_GOALS = [
     Goal(GoalType.TURN_LEFT, target_value=90, tolerance=15, timeout=60),
-    Goal(GoalType.MOVE_FORWARD, target_value=5, tolerance=0.5, timeout=60),
+    Goal(GoalType.MOVE_FORWARD, target_value=5 * WHEELCHAIR_LENGTH, tolerance=0.5 * WHEELCHAIR_LENGTH, timeout=60),
     Goal(GoalType.REST, target_value=5, tolerance=0.3, timeout=15),
     Goal(GoalType.TURN_RIGHT, target_value=90, tolerance=15, timeout=60),
 ]
