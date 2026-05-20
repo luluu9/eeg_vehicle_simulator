@@ -257,6 +257,7 @@ class EvaluationSession:
             elapsed = 0.0
             completed = False
             running = True
+            clock.tick()  # discard time accumulated during countdown
 
             while running:
                 dt = clock.tick(60) / 1000.0
