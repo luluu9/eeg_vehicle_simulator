@@ -54,6 +54,13 @@ def _draw_compass_arrow(screen, goal, start_state, current_state):
     pygame.draw.circle(screen, _COLOR_OUTLINE, (cx, cy), r, 2)
 
     shaft_len = r * 1.0
+
+    ref_tip_x, ref_tip_y = cx, cy - shaft_len
+    ref_base_x, ref_base_y = cx, cy - shaft_len + shaft_len * 0.2
+    pygame.draw.line(screen, (0, 200, 0),
+                     (int(ref_base_x), int(ref_base_y)),
+                     (int(ref_tip_x), int(ref_tip_y)), 3)
+
     tip_x = cx + shaft_len * math.sin(angle)
     tip_y = cy - shaft_len * math.cos(angle)
     pygame.draw.line(screen, _COLOR_CUE, (cx, cy), (int(tip_x), int(tip_y)), 3)
