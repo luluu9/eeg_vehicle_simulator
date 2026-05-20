@@ -152,22 +152,76 @@ def _install_path_renderer(env, trajectory):
     import types
     car.draw = types.MethodType(patched_draw, car)
 
+# ── Intermission ─────────────────────────────────────────────────────────────
+
+_COUNTDOWN_FROM = 5
+_COUNTDOWN_COLOR = (0, 100, 255)
+_TEXT_COLOR = (255, 255, 255)
+_BAR_COLOR = (0, 0, 0, 160)
+
+
+def _draw_top_bar(screen: pygame.Surface, text: str):
+    sw, sh = screen.get_size()
+    font = pygame.font.SysFont("Arial", max(18, sh // 30))
+    rendered = font.render(text, True, _TEXT_COLOR)
+    bar_h = rendered.get_height() + 20
+    bar = pygame.Surface((sw, bar_h), pygame.SRCALPHA)
+    bar.fill(_BAR_COLOR)
+    screen.blit(bar, (0, 0))
+    screen.blit(rendered, (sw // 2 - rendered.get_width() // 2, 10))
+
+
+def _draw_countdown_digit(screen: pygame.Surface, digit: int):
+    sw, sh = screen.get_size()
+    cx = int(sw * WHEELCHAIR_CENTER_X_RATIO)
+    cy = int(sh * WHEELCHAIR_CENTER_Y_RATIO)
+    font = pygame.font.SysFont("Arial", max(48, sh // 8), bold=True)
+    rendered = font.render(str(digit), True, _COUNTDOWN_COLOR)
+    rendered.set_alpha(140)
+    screen.blit(rendered, (cx - rendered.get_width() // 2, cy - rendered.get_height() // 2))
+
+
+def run_intermission(env, screen: pygame.Surface, experiment):
+    _patch_pygame_flip()
+    env.step(REST_ACTION.copy())
+
+    info_text = f"Task {experiment.task}  ·  {experiment.strategy.capitalize()}  (#{experiment.task_id})"
+
+    waiting = True
+    while waiting:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                waiting = False
+
+        _draw_top_bar(screen, f"{info_text}    Press SPACE to begin")
+        _flip()
+        pygame.time.wait(16)
+
 
 class EvaluationSession:
-    def __init__(self, strategy_name: str, task_name: str):
+    def __init__(self, strategy_name: str, task_name: str,
+                 mi_channel: str, errp_channel: str | None, subject_id: str):
         self.strategy_name = strategy_name
         self.task_name = task_name.upper()
+        self.mi_channel = mi_channel
+        self.errp_channel = errp_channel
+        self.subject_id = subject_id
         self.metrics = MetricsCollector()
         self.monitor = MultiStreamMonitor()
 
-    def run(self) -> dict:
+    def run(self, env=None, screen=None) -> dict:
         _patch_pygame_flip()
         self.monitor.start()
 
-        env = gym.make("WheelchairRacing-v0", render_mode="human", max_episode_steps=10_000_000)
+        owned_env = env is None
+        if owned_env:
+            env = gym.make("WheelchairRacing-v0", render_mode="human", max_episode_steps=10_000_000)
+            env.reset()
+            screen = pygame.display.get_surface()
+
         strategy = STUDY_STRATEGIES[self.strategy_name]()
-        env.reset()
-        screen = pygame.display.get_surface()
 
         try:
             if self.task_name == "A":
@@ -176,10 +230,18 @@ class EvaluationSession:
                 self._run_task_b(env, strategy, screen)
         finally:
             self.monitor.stop()
-            env.close()
-            pygame.quit()
+            if owned_env:
+                env.close()
+                pygame.quit()
 
-        return self.metrics.summary()
+        result = self.metrics.summary()
+        result.update({
+            "subject_id": self.subject_id,
+            "task": self.task_name,
+            "strategy": self.strategy_name,
+            "timestamp": time.strftime("%Y_%m_%d_%H:%M:%S"),
+        })
+        return result
 
     def _run_task_a(self, env, strategy, screen):
         clock = pygame.time.Clock()
@@ -189,6 +251,8 @@ class EvaluationSession:
         for i, goal in enumerate(goals):
             env.reset()
             start_state = get_wheelchair_state(env)
+            if not self._goal_countdown(env, screen, goal, i, start_state):
+                return
             self.metrics.start_trial()
             elapsed = 0.0
             completed = False
@@ -202,7 +266,7 @@ class EvaluationSession:
                     return
 
                 mi_probs = self.monitor.get_probabilities()
-                errp_data = self.monitor.get_errp()
+                errp_data = self._pick_errp(self.monitor.get_errp())
                 stream = self._pick_stream(mi_probs)
                 action = strategy.compute(mi_probs, stream, errp_data) if stream else REST_ACTION.copy()
 
@@ -242,7 +306,7 @@ class EvaluationSession:
                 break
 
             mi_probs = self.monitor.get_probabilities()
-            errp_data = self.monitor.get_errp()
+            errp_data = self._pick_errp(self.monitor.get_errp())
             stream = self._pick_stream(mi_probs)
             action = strategy.compute(mi_probs, stream, errp_data) if stream else REST_ACTION.copy()
 
@@ -261,9 +325,37 @@ class EvaluationSession:
         self.metrics.end_trial("trajectory", trajectory.completed, trajectory.total_path_length)
 
     def _pick_stream(self, mi_probs: dict) -> str | None:
-        if not mi_probs:
-            return None
-        return next(iter(mi_probs))
+        if self.mi_channel in mi_probs:
+            return self.mi_channel
+        return None
+
+    def _pick_errp(self, errp_data: dict) -> dict:
+        if self.errp_channel and self.errp_channel in errp_data:
+            return {self.errp_channel: errp_data[self.errp_channel]}
+        return {}
+
+    @staticmethod
+    def _goal_countdown(env, screen, goal, trial_idx: int, start_state) -> bool:
+        for count in range(_COUNTDOWN_FROM, 0, -1):
+            deadline = time.monotonic() + 1.0
+            while time.monotonic() < deadline:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        return False
+                    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                        return False
+                env.step(REST_ACTION.copy())
+                state = get_wheelchair_state(env)
+                if goal.goal_type in (GoalType.TURN_LEFT, GoalType.TURN_RIGHT):
+                    _draw_compass_arrow(screen, goal, start_state, state)
+                elif goal.goal_type == GoalType.REST:
+                    _draw_rest_circle(screen)
+                elif goal.goal_type == GoalType.MOVE_FORWARD:
+                    _draw_forward_line(screen, goal, start_state, state)
+                _draw_countdown_digit(screen, count)
+                _flip()
+                pygame.time.wait(16)
+        return True
 
     @staticmethod
     def _handle_events() -> bool:
