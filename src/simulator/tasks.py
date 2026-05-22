@@ -140,17 +140,20 @@ class TrajectoryTask:
 
 
 def create_default_trajectory() -> TrajectoryTask:
-    spacing = 3.0
-    waypoints = []
-    # Segment 1: Forward (up) - requires forward
-    for i in range(1, 6):
-        waypoints.append(Waypoint(0, i * spacing))
-    # Segment 2: Right - requires right turn + forward
-    top = 5 * spacing
-    for i in range(1, 6):
-        waypoints.append(Waypoint(i * spacing, top))
-    # Segment 3: Up again - requires left turn + forward
-    right_x = 5 * spacing
-    for i in range(1, 6):
-        waypoints.append(Waypoint(right_x, top + i * spacing))
+    step = WHEELCHAIR_LENGTH  # 4.0 Box2D units = 1 m real-world
+    n = 5                     # 5 waypoints per segment = 5 m per segment
+
+    end_forward = n * step    # 20.0  (end of segment 1)
+    end_right   = n * step    # 20.0  (width of segment 2)
+
+    waypoints = [Waypoint(0.0, 0.0)]  # start at car spawn position (immediately cleared)
+    # Segment 1: 5 m forward (north, +y) - requires FORWARD MI
+    for i in range(1, n + 1):
+        waypoints.append(Waypoint(0.0, i * step))
+    # Segment 2: 5 m to the right (east, +x) - requires RIGHT MI then FORWARD
+    for i in range(1, n + 1):
+        waypoints.append(Waypoint(i * step, end_forward))
+    # Segment 3: 5 m to the left (turn left from east → face north, +y) - requires LEFT MI then FORWARD
+    for i in range(1, n + 1):
+        waypoints.append(Waypoint(end_right, end_forward + i * step))
     return TrajectoryTask(waypoints)

@@ -124,10 +124,10 @@ def _draw_path_on_surf(surf, trajectory, zoom, translation, angle):
         return
 
     half_w = _PATH_WIDTH * zoom / 2
+    pts = [_world_to_surf(wp.x, wp.y, zoom, translation, angle) for wp in wps]
 
     for i in range(len(wps) - 1):
-        p1 = _world_to_surf(wps[i].x, wps[i].y, zoom, translation, angle)
-        p2 = _world_to_surf(wps[i + 1].x, wps[i + 1].y, zoom, translation, angle)
+        p1, p2 = pts[i], pts[i + 1]
 
         dx = p2[0] - p1[0]
         dy = p2[1] - p1[1]
@@ -146,6 +146,12 @@ def _draw_path_on_surf(surf, trajectory, zoom, translation, angle):
 
         color = _PATH_COLOR if i < trajectory.current_idx else _PATH_EDGE_COLOR
         pygame.draw.polygon(surf, color, quad)
+
+    # Round joins: fill corner gaps with circles at each interior waypoint
+    r = max(1, int(half_w))
+    for i in range(len(wps)):
+        color = _PATH_COLOR if i < trajectory.current_idx else _PATH_EDGE_COLOR
+        pygame.draw.circle(surf, color, (int(pts[i][0]), int(pts[i][1])), r)
 
 
 def _install_path_renderer(env, trajectory):
