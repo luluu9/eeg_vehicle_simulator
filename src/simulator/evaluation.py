@@ -153,6 +153,35 @@ def _draw_path_on_surf(surf, trajectory, zoom, translation, angle):
         color = _PATH_COLOR if i < trajectory.current_idx else _PATH_EDGE_COLOR
         pygame.draw.circle(surf, color, (int(pts[i][0]), int(pts[i][1])), r)
 
+    # Checkered finish flag at last waypoint (world-space, same transform as grass)
+    _draw_finish_flag_on_surf(surf, trajectory.waypoints[-1], zoom, translation, angle)
+
+
+def _draw_finish_flag_on_surf(surf, wp, zoom, translation, angle):
+    cell = _PATH_WIDTH / 4  # world units: 4×4 grid spans PATH_WIDTH
+    half = 2 * cell
+    cx, cy = wp.x, wp.y
+    for row in range(4):
+        for col in range(4):
+            color = (255, 255, 255) if (row + col) % 2 == 0 else (0, 0, 0)
+            x0 = cx - half + col * cell
+            y0 = cy - half + row * cell
+            corners = [(x0, y0), (x0 + cell, y0), (x0 + cell, y0 + cell), (x0, y0 + cell)]
+            pts = [pygame.math.Vector2(c).rotate_rad(angle) for c in corners]
+            pts = [(int(p[0] * zoom + translation[0]), int(p[1] * zoom + translation[1])) for p in pts]
+            pygame.draw.polygon(surf, color, pts)
+    # Gold border
+    bx0, by0 = cx - half, cy - half
+    border = [
+        (bx0, by0), (bx0 + 4 * cell, by0),
+        (bx0 + 4 * cell, by0 + 4 * cell), (bx0, by0 + 4 * cell),
+    ]
+    bpts = [pygame.math.Vector2(c).rotate_rad(angle) for c in border]
+    bpts = [(int(p[0] * zoom + translation[0]), int(p[1] * zoom + translation[1])) for p in bpts]
+    pygame.draw.polygon(surf, (255, 215, 0), bpts, 2)
+
+
+
 
 def _install_path_renderer(env, trajectory):
     car = env.unwrapped.car
