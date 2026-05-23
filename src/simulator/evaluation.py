@@ -375,6 +375,24 @@ class EvaluationSession:
 
         self.metrics.end_trial("trajectory", trajectory.completed, trajectory.total_path_length)
 
+        if trajectory.completed:
+            self._show_goal_reached(env, screen)
+
+    @staticmethod
+    def _show_goal_reached(env, screen):
+        sw, sh = screen.get_size()
+        font_big = pygame.font.SysFont("Arial", max(48, sh // 12), bold=True)
+        deadline = time.monotonic() + 2.5
+        while time.monotonic() < deadline:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return
+            env.step(REST_ACTION.copy())
+            text = font_big.render("Goal reached!", True, (255, 215, 0))
+            screen.blit(text, (sw // 2 - text.get_width() // 2, sh // 2 - text.get_height()))
+            _flip()
+            pygame.time.wait(16)
+
     def _pick_stream(self, mi_probs: dict) -> str | None:
         if self.mi_channel in mi_probs:
             return self.mi_channel
