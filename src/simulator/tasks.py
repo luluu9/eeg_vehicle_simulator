@@ -2,7 +2,7 @@ import math
 from enum import Enum
 from dataclasses import dataclass
 
-from gymnasium.envs.box2d.wheelchair_dynamics import WHEELCHAIR_LENGTH
+from gymnasium.envs.box2d.wheelchair_dynamics import WHEELCHAIR_LENGTH, WHEELCHAIR_WIDTH
 
 
 class GoalType(Enum):
@@ -85,22 +85,55 @@ class GoalChecker:
             return 0.5 * math.radians(goal.target_value)
         return 0.0
 
+    @staticmethod
+    def completion_pct(goal: Goal, start: WheelchairState, current: WheelchairState, elapsed: float) -> float:
+        if goal.goal_type == GoalType.TURN_LEFT:
+            delta = _normalize_angle(current.angle - start.angle)
+            return min(1.0, max(0.0, delta / math.radians(goal.target_value)))
+        elif goal.goal_type == GoalType.TURN_RIGHT:
+            delta = _normalize_angle(current.angle - start.angle)
+            return min(1.0, max(0.0, -delta / math.radians(goal.target_value)))
+        elif goal.goal_type == GoalType.MOVE_FORWARD:
+            dx = current.x - start.x
+            dy = current.y - start.y
+            dist = math.sqrt(dx * dx + dy * dy)
+            return min(1.0, dist / goal.target_value)
+        elif goal.goal_type == GoalType.REST:
+            return min(1.0, elapsed / goal.target_value) if goal.target_value > 0 else 1.0
+        return 0.0
+
+    @staticmethod
+    def optimal_time(goal: Goal) -> float:
+        if goal.goal_type == GoalType.MOVE_FORWARD:
+            steps = math.ceil(goal.target_value / WHEELCHAIR_LENGTH)
+            return steps * 7.5
+        if goal.goal_type in (GoalType.TURN_LEFT, GoalType.TURN_RIGHT):
+            steps = math.ceil(goal.target_value / 15.0)
+            return steps * 7.5
+        if goal.goal_type == GoalType.REST:
+            return goal.target_value
+        return goal.timeout
+
 
 TASK_A_GOALS = [
-    # Goal(GoalType.TURN_LEFT, target_value=90, timeout=60),
-    # Goal(GoalType.MOVE_FORWARD, target_value=5 * WHEELCHAIR_LENGTH, timeout=60),
+    Goal(GoalType.TURN_LEFT, target_value=90, timeout=60),
+    Goal(GoalType.MOVE_FORWARD, target_value=5 * WHEELCHAIR_LENGTH, timeout=60),
     Goal(GoalType.REST, target_value=15, timeout=60),
-    # Goal(GoalType.TURN_RIGHT, target_value=90, timeout=60),
+    Goal(GoalType.TURN_RIGHT, target_value=90, timeout=60),
 ]
 
 
 class TrajectoryTask:
     TIME_LIMIT = 300.0
 
+    ROAD_HALF_WIDTH = 2 * WHEELCHAIR_WIDTH
+
     def __init__(self, waypoints: list[Waypoint], waypoint_radius: float = 2.0):
         self.waypoints = waypoints
         self.waypoint_radius = waypoint_radius
         self.current_idx = 0
+        self._cumulative_lengths = self._compute_cumulative_lengths()
+        self._max_progress: float = 0.0
 
     def check_waypoint(self, x: float, y: float) -> bool:
         if self.current_idx >= len(self.waypoints):
@@ -128,15 +161,66 @@ class TrajectoryTask:
 
     @property
     def total_path_length(self) -> float:
-        total = 0.0
+        if self._cumulative_lengths:
+            return self._cumulative_lengths[-1]
+        return 0.0
+
+    def _compute_cumulative_lengths(self) -> list[float]:
+        lengths = [0.0]
         for i in range(1, len(self.waypoints)):
             dx = self.waypoints[i].x - self.waypoints[i - 1].x
             dy = self.waypoints[i].y - self.waypoints[i - 1].y
-            total += math.sqrt(dx * dx + dy * dy)
-        return total
+            lengths.append(lengths[-1] + math.sqrt(dx * dx + dy * dy))
+        return lengths
+
+    def arc_length_progress(self, x: float, y: float) -> float:
+        best_s = 0.0
+        min_dist_sq = float('inf')
+        for i in range(len(self.waypoints) - 1):
+            ax, ay = self.waypoints[i].x, self.waypoints[i].y
+            bx, by = self.waypoints[i + 1].x, self.waypoints[i + 1].y
+            dx, dy = bx - ax, by - ay
+            seg_len_sq = dx * dx + dy * dy
+            if seg_len_sq < 1e-9:
+                continue
+            t = max(0.0, min(1.0, ((x - ax) * dx + (y - ay) * dy) / seg_len_sq))
+            px, py = ax + t * dx, ay + t * dy
+            dist_sq = (x - px) ** 2 + (y - py) ** 2
+            seg_len = math.sqrt(seg_len_sq)
+            s = self._cumulative_lengths[i] + t * seg_len
+            if dist_sq < min_dist_sq - 1e-9:
+                min_dist_sq = dist_sq
+                best_s = s
+            elif abs(dist_sq - min_dist_sq) < 1e-9 and s > best_s:
+                best_s = s
+        progress = best_s / self.total_path_length if self.total_path_length > 0 else 1.0
+        self._max_progress = max(self._max_progress, progress)
+        return self._max_progress
+
+    def is_on_road(self, x: float, y: float) -> bool:
+        min_dist = float('inf')
+        for i in range(len(self.waypoints) - 1):
+            ax, ay = self.waypoints[i].x, self.waypoints[i].y
+            bx, by = self.waypoints[i + 1].x, self.waypoints[i + 1].y
+            dx, dy = bx - ax, by - ay
+            seg_len_sq = dx * dx + dy * dy
+            if seg_len_sq < 1e-9:
+                continue
+            t = max(0.0, min(1.0, ((x - ax) * dx + (y - ay) * dy) / seg_len_sq))
+            px, py = ax + t * dx, ay + t * dy
+            dist = math.sqrt((x - px) ** 2 + (y - py) ** 2)
+            if dist < min_dist:
+                min_dist = dist
+        return min_dist <= self.ROAD_HALF_WIDTH
+
+    @property
+    def optimal_time(self) -> float:
+        steps_needed = len(self.waypoints) - 1
+        return steps_needed * 7.5
 
     def reset(self):
         self.current_idx = 0
+        self._max_progress = 0.0
 
 
 def create_default_trajectory() -> TrajectoryTask:

@@ -7,6 +7,7 @@ import pygame
 
 from .input_handler import MultiStreamMonitor
 from .strategies import STUDY_STRATEGIES, REST_ACTION
+from ..common.constants import StudyClass
 from .metrics import MetricsCollector
 from .tasks import (
     TASK_A_GOALS, GoalChecker, GoalType, TrajectoryTask, Waypoint,
@@ -26,6 +27,12 @@ _COLOR_CUE = (255, 255, 0)
 _COLOR_REST = (255, 255, 0)
 _COLOR_OUTLINE = (0, 100, 255)
 
+_GOAL_TO_CLASS = {
+    GoalType.TURN_LEFT: StudyClass.LEFT.value,
+    GoalType.TURN_RIGHT: StudyClass.RIGHT.value,
+    GoalType.MOVE_FORWARD: StudyClass.FORWARD.value,
+    GoalType.REST: StudyClass.REST.value,
+}
 
 def _patch_pygame_flip():
     global pygame_flip_original
@@ -181,8 +188,6 @@ def _draw_finish_flag_on_surf(surf, wp, zoom, translation, angle):
     pygame.draw.polygon(surf, (255, 215, 0), bpts, 2)
 
 
-
-
 def _install_path_renderer(env, trajectory):
     car = env.unwrapped.car
     original_draw = car.draw.__func__ if hasattr(car.draw, '__func__') else None
@@ -197,13 +202,20 @@ def _install_path_renderer(env, trajectory):
     import types
     car.draw = types.MethodType(patched_draw, car)
 
+
+def _get_errp_prob(errp_data: dict) -> float:
+    if not errp_data:
+        return 0.0
+    for probs in errp_data.values():
+        return float(probs[1]) if len(probs) >= 2 else 0.0
+    return 0.0
+
 # ── Intermission ─────────────────────────────────────────────────────────────
 
 _COUNTDOWN_FROM = 5
 _COUNTDOWN_COLOR = (0, 100, 255)
 _TEXT_COLOR = (255, 255, 255)
 _BAR_COLOR = (0, 0, 0, 160)
-
 
 def _draw_top_bar(screen: pygame.Surface, text: str):
     sw, sh = screen.get_size()
@@ -317,12 +329,18 @@ class EvaluationSession:
                 stream = self._pick_stream(mi_probs)
                 action = strategy.compute(mi_probs, stream, errp_data) if stream else REST_ACTION.copy()
 
+                mi_class = int(np.argmax(mi_probs[stream][:4])) if stream and stream in mi_probs else StudyClass.REST.value
+
                 if np.array_equal(action, REST_ACTION):
                     rest_accumulated += dt
 
                 env.step(action)
                 state = get_wheelchair_state(env)
                 self.metrics.record_position(state.x, state.y)
+                self.metrics.record_decision(
+                    state.x, state.y, state.angle, action, mi_class,
+                    errp_error_prob=_get_errp_prob(errp_data),
+                )
 
                 if hasattr(strategy, 'correction_count'):
                     while self.metrics._correction_count < strategy.correction_count:
@@ -338,8 +356,12 @@ class EvaluationSession:
                 self._render_goal_cue(screen, goal, i, elapsed, start_state, state, rest_accumulated)
                 _flip()
 
-            optimal = GoalChecker.optimal_path_length(goal)
-            self.metrics.end_trial(goal.goal_type.value, completed, optimal)
+            goal_completion_pct = GoalChecker.completion_pct(goal, start_state, state, check_elapsed)
+            optimal_time = GoalChecker.optimal_time(goal)
+            self.metrics.end_trial(
+                goal.goal_type.value, completed, goal_completion_pct, optimal_time,
+                expected_class=_GOAL_TO_CLASS[goal.goal_type],
+            )
 
     def _run_task_b(self, env, strategy, screen):
         clock = pygame.time.Clock()
@@ -364,10 +386,21 @@ class EvaluationSession:
             stream = self._pick_stream(mi_probs)
             action = strategy.compute(mi_probs, stream, errp_data) if stream else REST_ACTION.copy()
 
+            mi_class = int(np.argmax(mi_probs[stream][:4])) if stream and stream in mi_probs else StudyClass.REST.value
+
             env.step(action)
             state = get_wheelchair_state(env)
             self.metrics.record_position(state.x, state.y)
+
+            on_road = trajectory.is_on_road(state.x, state.y)
+            self.metrics.record_decision(
+                state.x, state.y, state.angle, action, mi_class,
+                errp_error_prob=_get_errp_prob(errp_data),
+                on_road=on_road,
+            )
+
             trajectory.check_waypoint(state.x, state.y)
+            trajectory.arc_length_progress(state.x, state.y)
 
             if hasattr(strategy, 'correction_count'):
                 while self.metrics._correction_count < strategy.correction_count:
@@ -376,7 +409,8 @@ class EvaluationSession:
             self._render_trajectory_overlay(screen, trajectory, elapsed)
             _flip()
 
-        self.metrics.end_trial("trajectory", trajectory.completed, trajectory.total_path_length)
+        goal_completion_pct = trajectory.arc_length_progress(state.x, state.y)
+        self.metrics.end_trial("trajectory", trajectory.completed, goal_completion_pct, trajectory.optimal_time)
 
         if trajectory.completed:
             self._show_goal_reached(env, screen)
