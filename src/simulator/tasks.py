@@ -104,12 +104,13 @@ class GoalChecker:
 
     @staticmethod
     def optimal_time(goal: Goal) -> float:
+        from .evaluation import T_CYCLE, FORWARD_DISPLACEMENT, ROTATION_DISPLACEMENT
         if goal.goal_type == GoalType.MOVE_FORWARD:
-            steps = math.ceil(goal.target_value / WHEELCHAIR_LENGTH)
-            return steps * 7.5
+            steps = math.ceil(goal.target_value / FORWARD_DISPLACEMENT)
+            return steps * T_CYCLE
         if goal.goal_type in (GoalType.TURN_LEFT, GoalType.TURN_RIGHT):
-            steps = math.ceil(goal.target_value / 15.0)
-            return steps * 7.5
+            steps = math.ceil(goal.target_value / math.degrees(ROTATION_DISPLACEMENT))
+            return steps * T_CYCLE
         if goal.goal_type == GoalType.REST:
             return goal.target_value
         return goal.timeout
@@ -215,8 +216,9 @@ class TrajectoryTask:
 
     @property
     def optimal_time(self) -> float:
+        from .evaluation import T_CYCLE
         steps_needed = len(self.waypoints) - 1
-        return steps_needed * 7.5
+        return steps_needed * T_CYCLE
 
     def reset(self):
         self.current_idx = 0

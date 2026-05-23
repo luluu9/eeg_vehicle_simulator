@@ -13,11 +13,18 @@ from .tasks import (
     TASK_A_GOALS, GoalChecker, GoalType, TrajectoryTask, Waypoint,
     get_wheelchair_state, create_default_trajectory, _normalize_angle,
 )
-from gymnasium.envs.box2d.wheelchair_dynamics import WHEELCHAIR_WIDTH
+from gymnasium.envs.box2d.wheelchair_dynamics import WHEELCHAIR_WIDTH, WHEELCHAIR_LENGTH
 from gymnasium.envs.box2d.wheelchair_racing import (
     WHEELCHAIR_CENTER_X_RATIO, WHEELCHAIR_CENTER_Y_RATIO,
-    WINDOW_W, WINDOW_H, ZOOM, SCALE,
+    WINDOW_W, WINDOW_H, ZOOM, SCALE, FPS as PHYSICS_FPS,
 )
+
+# ── Discrete Command Cycle Parameters ────────────────────────────────────────
+T_CYCLE = 1.0  # seconds per command cycle
+FORWARD_DISPLACEMENT = WHEELCHAIR_LENGTH  # Box2D units per forward command (= 1 real meter)
+ROTATION_DISPLACEMENT = math.radians(15)  # radians per rotation command
+ERRP_THRESHOLD = 0.50  # probability threshold for ErrP error detection
+STEPS_PER_CYCLE = int(T_CYCLE * PHYSICS_FPS)  # physics steps per animation
 
 
 pygame_flip_original = None
@@ -208,6 +215,32 @@ def _get_errp_prob(errp_data: dict) -> float:
         return float(probs[1]) if len(probs) >= 2 else 0.0
     return 0.0
 
+
+# ── Discrete Command Helpers ─────────────────────────────────────────────────
+
+def _compute_target(state, command_class: int):
+    x, y, angle = state.x, state.y, state.angle
+    if command_class == StudyClass.FORWARD.value:
+        return x + FORWARD_DISPLACEMENT * math.cos(angle), y + FORWARD_DISPLACEMENT * math.sin(angle), angle
+    elif command_class == StudyClass.LEFT.value:
+        return x, y, angle + ROTATION_DISPLACEMENT
+    elif command_class == StudyClass.RIGHT.value:
+        return x, y, angle - ROTATION_DISPLACEMENT
+    return x, y, angle  # REST
+
+
+def _set_wheelchair_pose(env, x, y, angle):
+    car = env.unwrapped.car
+    car.hull.position = (x, y)
+    car.hull.angle = angle
+    car.hull.linearVelocity = (0, 0)
+    car.hull.angularVelocity = 0
+    for w in car.wheels:
+        w.linearVelocity = (0, 0)
+        w.angularVelocity = 0
+        w.omega = 0
+
+
 # ── Intermission ─────────────────────────────────────────────────────────────
 
 _COUNTDOWN_FROM = 5
@@ -276,13 +309,11 @@ class EvaluationSession:
             env.reset()
             screen = pygame.display.get_surface()
 
-        strategy = STUDY_STRATEGIES[self.strategy_name]()
-
         try:
             if self.task_name == "A":
-                self._run_task_a(env, strategy, screen)
+                self._run_task_a(env, None, screen)
             elif self.task_name == "B":
-                self._run_task_b(env, strategy, screen)
+                self._run_task_b(env, None, screen)
         finally:
             self.monitor.stop()
             if owned_env:
@@ -299,7 +330,6 @@ class EvaluationSession:
         return result
 
     def _run_task_a(self, env, strategy, screen):
-        clock = pygame.time.Clock()
         goals = list(TASK_A_GOALS)
         random.shuffle(goals)
 
@@ -312,48 +342,55 @@ class EvaluationSession:
             elapsed = 0.0
             rest_accumulated = 0.0
             completed = False
-            running = True
-            clock.tick()  # discard time accumulated during countdown
 
-            while running:
-                dt = clock.tick(60) / 1000.0
-                elapsed += dt
-
+            while True:
                 if not self._handle_events():
                     return
 
                 mi_probs = self.monitor.get_probabilities()
                 errp_data = self._pick_errp(self.monitor.get_errp())
                 stream = self._pick_stream(mi_probs)
-                action = strategy.compute(mi_probs, stream, errp_data) if stream else REST_ACTION.copy()
+                probs = mi_probs[stream][:4] if stream and stream in mi_probs else np.array([1.0, 0, 0, 0])
+                command_class = int(np.argmax(probs))
+                errp_prob = _get_errp_prob(errp_data)
 
-                mi_class = int(np.argmax(mi_probs[stream][:4])) if stream and stream in mi_probs else StudyClass.REST.value
-
-                if np.array_equal(action, REST_ACTION):
-                    rest_accumulated += dt
-
-                env.step(action)
-                state = get_wheelchair_state(env)
-                self.metrics.record_position(state.x, state.y)
-                self.metrics.record_decision(
-                    state.x, state.y, state.angle, action, mi_class,
-                    errp_error_prob=_get_errp_prob(errp_data),
+                pre_state = get_wheelchair_state(env)
+                abort = self._animate_command(
+                    env, screen, command_class,
+                    overlay_fn=lambda: self._render_goal_cue(screen, goal, i, elapsed, start_state, get_wheelchair_state(env), rest_accumulated),
                 )
+                if abort:
+                    return
+                elapsed += T_CYCLE
 
-                if hasattr(strategy, 'correction_count'):
-                    while self.metrics._correction_count < strategy.correction_count:
-                        self.metrics.record_correction()
+                if command_class == StudyClass.REST.value:
+                    rest_accumulated += T_CYCLE
+
+                # ErrP handling
+                correction = self._apply_errp(env, screen, errp_prob, pre_state, probs,
+                    overlay_fn=lambda: self._render_goal_cue(screen, goal, i, elapsed, start_state, get_wheelchair_state(env), rest_accumulated),
+                )
+                if correction is None:
+                    return  # abort
+                if correction:
+                    elapsed += T_CYCLE
+
+                state = get_wheelchair_state(env)
+                self.metrics.record_decision(
+                    state.x, state.y, state.angle,
+                    np.zeros(3), command_class,
+                    errp_error_prob=errp_prob,
+                )
 
                 check_elapsed = rest_accumulated if goal.goal_type == GoalType.REST else elapsed
                 if GoalChecker.check(goal, start_state, state, check_elapsed):
                     completed = True
-                    running = False
+                    break
                 if elapsed >= goal.timeout:
-                    running = False
+                    break
 
-                self._render_goal_cue(screen, goal, i, elapsed, start_state, state, rest_accumulated)
-                _flip()
-
+            state = get_wheelchair_state(env)
+            check_elapsed = rest_accumulated if goal.goal_type == GoalType.REST else elapsed
             goal_completion_pct = GoalChecker.completion_pct(goal, start_state, state, check_elapsed)
             optimal_time = GoalChecker.optimal_time(goal)
             self.metrics.end_trial(
@@ -362,7 +399,6 @@ class EvaluationSession:
             )
 
     def _run_task_b(self, env, strategy, screen):
-        clock = pygame.time.Clock()
         trajectory = create_default_trajectory()
         env.reset()
         _install_path_renderer(env, trajectory)
@@ -370,48 +406,100 @@ class EvaluationSession:
             return
         self.metrics.start_trial()
         elapsed = 0.0
-        clock.tick()  # discard time accumulated during countdown
 
         while elapsed < trajectory.TIME_LIMIT and not trajectory.completed:
-            dt = clock.tick(60) / 1000.0
-            elapsed += dt
-
             if not self._handle_events():
                 break
 
             mi_probs = self.monitor.get_probabilities()
             errp_data = self._pick_errp(self.monitor.get_errp())
             stream = self._pick_stream(mi_probs)
-            action = strategy.compute(mi_probs, stream, errp_data) if stream else REST_ACTION.copy()
+            probs = mi_probs[stream][:4] if stream and stream in mi_probs else np.array([1.0, 0, 0, 0])
+            command_class = int(np.argmax(probs))
+            errp_prob = _get_errp_prob(errp_data)
 
-            mi_class = int(np.argmax(mi_probs[stream][:4])) if stream and stream in mi_probs else StudyClass.REST.value
+            pre_state = get_wheelchair_state(env)
+            abort = self._animate_command(
+                env, screen, command_class,
+                overlay_fn=lambda: self._render_trajectory_overlay(screen, trajectory, elapsed),
+            )
+            if abort:
+                break
+            elapsed += T_CYCLE
 
-            env.step(action)
+            # ErrP handling
+            correction = self._apply_errp(env, screen, errp_prob, pre_state, probs,
+                overlay_fn=lambda: self._render_trajectory_overlay(screen, trajectory, elapsed),
+            )
+            if correction is None:
+                break  # abort
+            if correction:
+                elapsed += T_CYCLE
+
             state = get_wheelchair_state(env)
-            self.metrics.record_position(state.x, state.y)
-
             on_road = trajectory.is_on_road(state.x, state.y)
             self.metrics.record_decision(
-                state.x, state.y, state.angle, action, mi_class,
-                errp_error_prob=_get_errp_prob(errp_data),
+                state.x, state.y, state.angle,
+                np.zeros(3), command_class,
+                errp_error_prob=errp_prob,
                 on_road=on_road,
             )
 
             trajectory.check_waypoint(state.x, state.y)
             trajectory.arc_length_progress(state.x, state.y)
 
-            if hasattr(strategy, 'correction_count'):
-                while self.metrics._correction_count < strategy.correction_count:
-                    self.metrics.record_correction()
-
-            self._render_trajectory_overlay(screen, trajectory, elapsed)
-            _flip()
-
+        state = get_wheelchair_state(env)
         goal_completion_pct = 1.0 if trajectory.completed else trajectory.arc_length_progress(state.x, state.y)
         self.metrics.end_trial("trajectory", trajectory.completed, goal_completion_pct, trajectory.optimal_time)
 
         if trajectory.completed:
             self._show_goal_reached(env, screen)
+
+    def _animate_command(self, env, screen, command_class: int, overlay_fn=None) -> bool:
+        """Animate a discrete command over T_CYCLE. Returns True if user aborted."""
+        state = get_wheelchair_state(env)
+        sx, sy, sa = state.x, state.y, state.angle
+        tx, ty, ta = _compute_target(state, command_class)
+
+        for step in range(1, STEPS_PER_CYCLE + 1):
+            if not self._handle_events():
+                return True
+            t = step / STEPS_PER_CYCLE
+            cx = sx + (tx - sx) * t
+            cy = sy + (ty - sy) * t
+            ca = sa + (ta - sa) * t
+            _set_wheelchair_pose(env, cx, cy, ca)
+            env.step(REST_ACTION.copy())
+            if overlay_fn:
+                overlay_fn()
+            _flip()
+        return False
+
+    def _apply_errp(self, env, screen, errp_prob: float, pre_state, probs: np.ndarray, overlay_fn=None):
+        """Check ErrP and handle correction. Returns: True=corrected, False=no error, None=abort."""
+        if self.strategy_name == "baseline" or errp_prob < ERRP_THRESHOLD:
+            return False
+
+        # Revert movement
+        _set_wheelchair_pose(env, pre_state.x, pre_state.y, pre_state.angle)
+        self.metrics.record_correction()
+
+        if self.strategy_name == "autocorrect":
+            sorted_idx = np.argsort(probs)[::-1]
+            second_best = int(sorted_idx[1])
+            abort = self._animate_command(env, screen, second_best, overlay_fn=overlay_fn)
+            if abort:
+                return None
+        else:
+            # ErrP-Stop: just stay in place, render one cycle of stillness
+            for _ in range(STEPS_PER_CYCLE):
+                if not self._handle_events():
+                    return None
+                env.step(REST_ACTION.copy())
+                if overlay_fn:
+                    overlay_fn()
+                _flip()
+        return True
 
     @staticmethod
     def _show_goal_reached(env, screen):
