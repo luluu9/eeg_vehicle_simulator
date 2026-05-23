@@ -346,8 +346,11 @@ class EvaluationSession:
         trajectory = create_default_trajectory()
         env.reset()
         _install_path_renderer(env, trajectory)
+        if not self._goal_countdown_simple(env, screen):
+            return
         self.metrics.start_trial()
         elapsed = 0.0
+        clock.tick()  # discard time accumulated during countdown
 
         while elapsed < trajectory.TIME_LIMIT and not trajectory.completed:
             dt = clock.tick(60) / 1000.0
@@ -421,6 +424,22 @@ class EvaluationSession:
                     _draw_rest_circle(screen, 0.0, goal.target_value)
                 elif goal.goal_type == GoalType.MOVE_FORWARD:
                     _draw_forward_line(screen, goal, start_state, state)
+                _draw_countdown_digit(screen, count)
+                _flip()
+                pygame.time.wait(16)
+        return True
+
+    @staticmethod
+    def _goal_countdown_simple(env, screen) -> bool:
+        for count in range(_COUNTDOWN_FROM, 0, -1):
+            deadline = time.monotonic() + 1.0
+            while time.monotonic() < deadline:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        return False
+                    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                        return False
+                env.step(REST_ACTION.copy())
                 _draw_countdown_digit(screen, count)
                 _flip()
                 pygame.time.wait(16)
