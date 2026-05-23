@@ -135,6 +135,30 @@ class MetricsCollector:
             "avg_road_adherence": float(np.mean(road_vals)) if road_vals else None,
             "total_corrections": sum(t.correction_count for t in self._trials),
             "itr_bits_per_min": itr,
+            "trials": [
+                {
+                    "goal_type": t.goal_type,
+                    "completed": t.completed,
+                    "goal_completion_pct": t.goal_completion_pct,
+                    "completion_time": t.completion_time,
+                    "optimal_time": t.optimal_time,
+                    "correction_count": t.correction_count,
+                    "road_adherence": t.road_adherence,
+                    "decisions": [
+                        {
+                            "timestamp": d.timestamp,
+                            "x": d.x,
+                            "y": d.y,
+                            "angle": d.angle,
+                            "action": d.action,
+                            "mi_class": d.mi_class,
+                            "errp_error_prob": d.errp_error_prob,
+                        }
+                        for d in t.decisions
+                    ],
+                }
+                for t in self._trials
+            ],
         }
 
     @staticmethod

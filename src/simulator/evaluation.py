@@ -409,7 +409,7 @@ class EvaluationSession:
             self._render_trajectory_overlay(screen, trajectory, elapsed)
             _flip()
 
-        goal_completion_pct = trajectory.arc_length_progress(state.x, state.y)
+        goal_completion_pct = 1.0 if trajectory.completed else trajectory.arc_length_progress(state.x, state.y)
         self.metrics.end_trial("trajectory", trajectory.completed, goal_completion_pct, trajectory.optimal_time)
 
         if trajectory.completed:
