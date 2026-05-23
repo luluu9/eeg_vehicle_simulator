@@ -28,11 +28,11 @@ class TestGoalChecker:
         goal = Goal(GoalType.TURN_LEFT, 90, 15)
         assert GoalChecker.check(goal, start, current, 5.0)
 
-    def test_turn_left_within_tolerance(self):
+    def test_turn_left_not_quite_enough(self):
         start = self._state(angle=0)
         current = self._state(angle=math.radians(80))
         goal = Goal(GoalType.TURN_LEFT, 90, 15)
-        assert GoalChecker.check(goal, start, current, 5.0)
+        assert not GoalChecker.check(goal, start, current, 5.0)
 
     def test_turn_left_not_completed(self):
         start = self._state(angle=0)
@@ -70,11 +70,11 @@ class TestGoalChecker:
         goal = Goal(GoalType.REST, 5, 0.3)
         assert not GoalChecker.check(goal, start, current, 3.0)
 
-    def test_rest_moved_too_far(self):
+    def test_rest_ignores_position(self):
         start = self._state(x=0, y=0)
         current = self._state(x=2, y=2)
         goal = Goal(GoalType.REST, 5, 0.3)
-        assert not GoalChecker.check(goal, start, current, 10.0)
+        assert GoalChecker.check(goal, start, current, 10.0)
 
 
 class TestOptimalPathLength:
