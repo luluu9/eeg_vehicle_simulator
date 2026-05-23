@@ -218,16 +218,7 @@ def _get_errp_prob(errp_data: dict) -> float:
 
 # ── Discrete Command Helpers ─────────────────────────────────────────────────
 
-def _compute_target(state, command_class: int):
-    x, y, angle = state.x, state.y, state.angle
-    if command_class == StudyClass.FORWARD.value:
-        return x + FORWARD_DISPLACEMENT * math.cos(angle), y + FORWARD_DISPLACEMENT * math.sin(angle), angle
-    elif command_class == StudyClass.LEFT.value:
-        return x, y, angle + ROTATION_DISPLACEMENT
-    elif command_class == StudyClass.RIGHT.value:
-        return x, y, angle - ROTATION_DISPLACEMENT
-    return x, y, angle  # REST
-
+from .strategies import study_action
 
 def _set_wheelchair_pose(env, x, y, angle):
     car = env.unwrapped.car
@@ -238,6 +229,7 @@ def _set_wheelchair_pose(env, x, y, angle):
     for w in car.wheels:
         w.linearVelocity = (0, 0)
         w.angularVelocity = 0
+        w.omega = 0
         w.omega = 0
 
 
@@ -456,23 +448,19 @@ class EvaluationSession:
             self._show_goal_reached(env, screen)
 
     def _animate_command(self, env, screen, command_class: int, overlay_fn=None) -> bool:
-        """Animate a discrete command over T_CYCLE. Returns True if user aborted."""
-        state = get_wheelchair_state(env)
-        sx, sy, sa = state.x, state.y, state.angle
-        tx, ty, ta = _compute_target(state, command_class)
+        """Execute a command via physics for T_CYCLE seconds. Returns True if user aborted."""
+        action = study_action(command_class)
 
-        for step in range(1, STEPS_PER_CYCLE + 1):
+        for step in range(STEPS_PER_CYCLE):
             if not self._handle_events():
                 return True
-            t = step / STEPS_PER_CYCLE
-            cx = sx + (tx - sx) * t
-            cy = sy + (ty - sy) * t
-            ca = sa + (ta - sa) * t
-            _set_wheelchair_pose(env, cx, cy, ca)
-            env.step(REST_ACTION.copy())
+            env.step(action)
             if overlay_fn:
                 overlay_fn()
             _flip()
+        # Brake to stop residual momentum
+        for _ in range(STEPS_PER_CYCLE // 5):
+            env.step(REST_ACTION.copy())
         return False
 
     def _apply_errp(self, env, screen, errp_prob: float, pre_state, probs: np.ndarray, overlay_fn=None):
