@@ -340,11 +340,9 @@ class EvaluationSession:
                     return
 
                 mi_probs = self.monitor.get_probabilities()
-                errp_data = self._pick_errp(self.monitor.get_errp())
                 stream = self._pick_stream(mi_probs)
                 probs = mi_probs[stream][:4] if stream and stream in mi_probs else np.array([1.0, 0, 0, 0])
                 command_class = int(np.argmax(probs))
-                errp_prob = _get_errp_prob(errp_data)
 
                 pre_state = get_wheelchair_state(env)
                 abort = self._animate_command(
@@ -357,6 +355,10 @@ class EvaluationSession:
 
                 if command_class == StudyClass.REST.value:
                     rest_accumulated += T_CYCLE
+
+                # Read ErrP AFTER animation (signal window [-0.2, 0.8]s now complete)
+                errp_data = self._pick_errp(self.monitor.get_errp())
+                errp_prob = _get_errp_prob(errp_data)
 
                 # ErrP handling
                 correction = self._apply_errp(env, screen, errp_prob, pre_state, probs,
@@ -404,11 +406,9 @@ class EvaluationSession:
                 break
 
             mi_probs = self.monitor.get_probabilities()
-            errp_data = self._pick_errp(self.monitor.get_errp())
             stream = self._pick_stream(mi_probs)
             probs = mi_probs[stream][:4] if stream and stream in mi_probs else np.array([1.0, 0, 0, 0])
             command_class = int(np.argmax(probs))
-            errp_prob = _get_errp_prob(errp_data)
 
             pre_state = get_wheelchair_state(env)
             abort = self._animate_command(
@@ -418,6 +418,10 @@ class EvaluationSession:
             if abort:
                 break
             elapsed += T_CYCLE
+
+            # Read ErrP AFTER animation (signal window [-0.2, 0.8]s now complete)
+            errp_data = self._pick_errp(self.monitor.get_errp())
+            errp_prob = _get_errp_prob(errp_data)
 
             # ErrP handling
             correction = self._apply_errp(env, screen, errp_prob, pre_state, probs,
