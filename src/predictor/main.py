@@ -3,7 +3,8 @@ from PyQt6.QtWidgets import QApplication
 from .ui.main_window import PredictorWindow
 import os
 import glob
-from .core.classifiers import CSPSVMClassifier, TGSPClassifier, StudyMIClassifier
+from .core.classifiers import CSPSVMClassifier, TGSPClassifier, StudyMIClassifier, StudyErrPClassifier
+from .core.errp_detector import ErrPDetector
 
 def main():
     app = QApplication(sys.argv)
@@ -32,8 +33,23 @@ def main():
         except Exception:
             pass
             
+    # Start ErrP detector if model exists
+    errp_detector = None
+    errp_paths = glob.glob(os.path.join(models_dir, "*errp*.joblib")) + glob.glob(os.path.join(models_dir, "*errp*.pkl"))
+    if errp_paths:
+        try:
+            errp_clf = StudyErrPClassifier(errp_paths[0])
+            errp_detector = ErrPDetector(errp_clf)
+            errp_detector.start()
+            print(f"ErrP Detector started with model: {os.path.basename(errp_paths[0])}")
+        except Exception as e:
+            print(f"Failed to start ErrP Detector: {e}")
+
     window.show()
-    sys.exit(app.exec())
+    ret = app.exec()
+    if errp_detector:
+        errp_detector.stop()
+    sys.exit(ret)
 
 if __name__ == "__main__":
     main()

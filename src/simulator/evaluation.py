@@ -4,10 +4,11 @@ import time
 import numpy as np
 import gymnasium as gym
 import pygame
+from pylsl import StreamInfo, StreamOutlet
 
 from .input_handler import MultiStreamMonitor
 from .strategies import STUDY_STRATEGIES, REST_ACTION
-from ..common.constants import StudyClass
+from ..common.constants import StudyClass, ErrPConfig
 from .metrics import MetricsCollector
 from .tasks import (
     TASK_A_GOALS, GoalChecker, GoalType, TrajectoryTask, Waypoint,
@@ -25,6 +26,17 @@ FORWARD_DISPLACEMENT = WHEELCHAIR_LENGTH  # Box2D units per forward command (= 1
 ROTATION_DISPLACEMENT = math.radians(15)  # radians per rotation command
 ERRP_THRESHOLD = 0.50  # probability threshold for ErrP error detection
 STEPS_PER_CYCLE = int(T_CYCLE * PHYSICS_FPS)  # physics steps per animation
+
+# ── Feedback Marker Outlet ────────────────────────────────────────────────────
+_marker_outlet: StreamOutlet | None = None
+
+
+def _get_marker_outlet() -> StreamOutlet:
+    global _marker_outlet
+    if _marker_outlet is None:
+        info = StreamInfo("Evaluation-feedback", "Markers", 1, 0.0, "int32", "eval_feedback_001")
+        _marker_outlet = StreamOutlet(info)
+    return _marker_outlet
 
 
 pygame_flip_original = None
@@ -454,6 +466,7 @@ class EvaluationSession:
     def _animate_command(self, env, screen, command_class: int, overlay_fn=None) -> bool:
         """Execute a command via physics for T_CYCLE seconds. Returns True if user aborted."""
         action = study_action(command_class)
+        _get_marker_outlet().push_sample([ErrPConfig.MOVEMENT_ONSET_MARKER])
 
         for step in range(STEPS_PER_CYCLE):
             if not self._handle_events():

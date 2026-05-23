@@ -42,3 +42,4 @@ class LSLConfig:
 class ErrPConfig:
     CONTENT_TYPE = "ErrP_Detection"
     CHANNEL_COUNT = 2  # [p_correct, p_error]
+    MOVEMENT_ONSET_MARKER = 30  # sent by evaluation at start of command execution
