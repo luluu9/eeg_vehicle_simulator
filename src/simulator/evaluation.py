@@ -151,14 +151,12 @@ def _draw_path_on_surf(surf, trajectory, zoom, translation, angle):
             (p1[0] - nx, p1[1] - ny),
         ]
 
-        color = _PATH_COLOR if i < trajectory.current_idx else _PATH_EDGE_COLOR
-        pygame.draw.polygon(surf, color, quad)
+        pygame.draw.polygon(surf, _PATH_EDGE_COLOR, quad)
 
     # Round joins: fill corner gaps with circles at each interior waypoint
     r = max(1, int(half_w))
     for i in range(len(wps)):
-        color = _PATH_COLOR if i < trajectory.current_idx else _PATH_EDGE_COLOR
-        pygame.draw.circle(surf, color, (int(pts[i][0]), int(pts[i][1])), r)
+        pygame.draw.circle(surf, _PATH_EDGE_COLOR, (int(pts[i][0]), int(pts[i][1])), r)
 
     # Checkered finish flag at last waypoint (world-space, same transform as grass)
     _draw_finish_flag_on_surf(surf, trajectory.waypoints[-1], zoom, translation, angle)
