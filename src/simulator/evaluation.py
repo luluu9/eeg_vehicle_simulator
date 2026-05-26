@@ -236,7 +236,7 @@ REVERSE_ACTION_MAP = {
     StudyClass.REST.value: REST_ACTION,
     StudyClass.LEFT.value: np.array([0.5, 0.3, 0.0], dtype=np.float32),
     StudyClass.RIGHT.value: np.array([-0.5, 0.3, 0.0], dtype=np.float32),
-    StudyClass.FORWARD.value: np.array([0.0, 0.0, 1.0], dtype=np.float32),
+    StudyClass.FORWARD.value: np.array([0.0, -0.3, 0.0], dtype=np.float32),
 }
 
 
