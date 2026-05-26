@@ -29,7 +29,7 @@ STUDY_EVENTS = {
 EEG_CHANNELS = [f"A{i}" for i in range(1, 17)]
 
 
-def load_epochs(file_paths: list[Path], tmin: float = 0.0, tmax: float = 3.5) -> mne.Epochs:
+def load_epochs(file_paths: list[Path], tmin: float = 1.5, tmax: float = 5.0) -> mne.Epochs:
     all_epochs = []
     for path in file_paths:
         raw = mne.io.read_raw_fif(str(path), preload=True)
@@ -72,8 +72,8 @@ def build_pipeline():
 def train_and_evaluate(
     data_files: list[Path],
     output_path: Path,
-    tmin: float = 0.0,
-    tmax: float = 3.5,
+    tmin: float = 1.5,
+    tmax: float = 5.0,
     n_folds: int = 10,
     test_size: float = 0.3,
 ) -> dict:
@@ -120,8 +120,8 @@ def main():
     parser = argparse.ArgumentParser(description="Train 4-class MI (TSLR) model")
     parser.add_argument("data_files", nargs="+", help=".fif files from collector")
     parser.add_argument("-o", "--output", default="models/mi_tslr.joblib")
-    parser.add_argument("--tmin", type=float, default=0.0)
-    parser.add_argument("--tmax", type=float, default=3.5)
+    parser.add_argument("--tmin", type=float, default=1.5)
+    parser.add_argument("--tmax", type=float, default=5.0)
     args = parser.parse_args()
 
     files = [Path(f) for f in args.data_files]

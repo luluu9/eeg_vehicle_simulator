@@ -59,7 +59,7 @@ class LSLClient:
 
 
 class DataLogger:
-    def __init__(self, save_dir="data"):
+    def __init__(self, save_dir="data_new"):
         self.save_dir = save_dir
         os.makedirs(self.save_dir, exist_ok=True)
         self.raw_data = []
