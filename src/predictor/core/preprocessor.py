@@ -13,9 +13,10 @@ class EEGPreprocessor:
         """
         Applies standard EEG preprocessing:
         1. Channel Selection (1:17)
-        2. Resampling (to target_srate)
-        3. Notch Filter (50Hz)
-        4. Bandpass Filter (8-32Hz)
+        2. Common Average Reference (CAR)
+        3. Resampling (to target_srate)
+        4. Notch Filter (50Hz)
+        5. Bandpass Filter (8-32Hz)
         
         Args:
             data: Raw LSL data (n_channels, n_samples).
@@ -36,7 +37,10 @@ class EEGPreprocessor:
         else:
             raise Exception("Not enough channels in the input data. Expected at least 16 EEG channels.")
 
-        # 2. Resampling
+        # 2. Common Average Reference
+        data = data - data.mean(axis=0, keepdims=True)
+
+        # 3. Resampling
         n_samples = data.shape[1]
         if n_samples == 0:
             return np.empty((data.shape[0], 0))
@@ -47,13 +51,13 @@ class EEGPreprocessor:
             # signal.resample uses FFT, assumed good for chunks
             data = signal.resample(data, target_samples, axis=1)
         
-        # 3. Notch Filter
+        # 4. Notch Filter
         # Note: filtfilt avoids phase shift but requires data length > padlen
         # We need to be careful with very short windows.
         b_notch, a_notch = signal.iirnotch(self.notch_freq, self.notch_quality, self.target_srate)
         data = signal.filtfilt(b_notch, a_notch, data, axis=-1)
         
-        # 4. Bandpass Filter
+        # 5. Bandpass Filter
         nyquist = 0.5 * self.target_srate
         low = self.lowcut / nyquist
         high = self.highcut / nyquist

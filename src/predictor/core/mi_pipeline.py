@@ -35,6 +35,7 @@ def load_epochs(file_paths: list[Path], tmin: float = 1.5, tmax: float = 5.0) ->
         raw = mne.io.read_raw_fif(str(path), preload=True)
         raw.pick(picks=EEG_CHANNELS)
         raw.info['dev_head_t'] = None
+        raw.set_eeg_reference(ref_channels='average', projection=False)
         raw.resample(sfreq=256)
         raw.filter(l_freq=8.0, h_freq=32.0, fir_design='firwin')
         raw.notch_filter(freqs=[50.0])
