@@ -232,17 +232,16 @@ def _get_errp_prob(errp_data: dict) -> float:
 
 from .strategies import study_action
 
-def _set_wheelchair_pose(env, x, y, angle):
-    car = env.unwrapped.car
-    car.hull.position = (x, y)
-    car.hull.angle = angle
-    car.hull.linearVelocity = (0, 0)
-    car.hull.angularVelocity = 0
-    for w in car.wheels:
-        w.linearVelocity = (0, 0)
-        w.angularVelocity = 0
-        w.omega = 0
-        w.omega = 0
+REVERSE_ACTION_MAP = {
+    StudyClass.REST.value: REST_ACTION,
+    StudyClass.LEFT.value: np.array([0.5, 0.3, 0.0], dtype=np.float32),
+    StudyClass.RIGHT.value: np.array([-0.5, 0.3, 0.0], dtype=np.float32),
+    StudyClass.FORWARD.value: np.array([0.0, 0.0, 1.0], dtype=np.float32),
+}
+
+
+def _reverse_action(command_class: int) -> np.ndarray:
+    return REVERSE_ACTION_MAP.get(command_class, REST_ACTION).copy()
 
 
 # ── Intermission ─────────────────────────────────────────────────────────────
@@ -356,7 +355,6 @@ class EvaluationSession:
                 probs = mi_probs[stream][:4] if stream and stream in mi_probs else np.array([1.0, 0, 0, 0])
                 command_class = int(np.argmax(probs))
 
-                pre_state = get_wheelchair_state(env)
                 abort = self._animate_command(
                     env, screen, command_class,
                     overlay_fn=lambda: self._render_goal_cue(screen, goal, i, elapsed, start_state, get_wheelchair_state(env), rest_accumulated),
@@ -373,7 +371,7 @@ class EvaluationSession:
                 errp_prob = _get_errp_prob(errp_data)
 
                 # ErrP handling
-                correction = self._apply_errp(env, screen, errp_prob, pre_state, probs,
+                correction = self._apply_errp(env, screen, errp_prob, command_class, probs,
                     overlay_fn=lambda: self._render_goal_cue(screen, goal, i, elapsed, start_state, get_wheelchair_state(env), rest_accumulated),
                 )
                 if correction is None:
@@ -422,7 +420,6 @@ class EvaluationSession:
             probs = mi_probs[stream][:4] if stream and stream in mi_probs else np.array([1.0, 0, 0, 0])
             command_class = int(np.argmax(probs))
 
-            pre_state = get_wheelchair_state(env)
             abort = self._animate_command(
                 env, screen, command_class,
                 overlay_fn=lambda: self._render_trajectory_overlay(screen, trajectory, elapsed),
@@ -436,7 +433,7 @@ class EvaluationSession:
             errp_prob = _get_errp_prob(errp_data)
 
             # ErrP handling
-            correction = self._apply_errp(env, screen, errp_prob, pre_state, probs,
+            correction = self._apply_errp(env, screen, errp_prob, command_class, probs,
                 overlay_fn=lambda: self._render_trajectory_overlay(screen, trajectory, elapsed),
             )
             if correction is None:
@@ -480,14 +477,25 @@ class EvaluationSession:
             env.step(REST_ACTION.copy())
         return False
 
-    def _apply_errp(self, env, screen, errp_prob: float, pre_state, probs: np.ndarray, overlay_fn=None):
+    def _apply_errp(self, env, screen, errp_prob: float, command_class: int, probs: np.ndarray, overlay_fn=None):
         """Check ErrP and handle correction. Returns: True=corrected, False=no error, None=abort."""
         if self.strategy_name == "baseline" or errp_prob < ERRP_THRESHOLD:
             return False
 
-        # Revert movement
-        _set_wheelchair_pose(env, pre_state.x, pre_state.y, pre_state.angle)
         self.metrics.record_correction()
+
+        # Animate reverse movement (MI commands paused during reversal)
+        reverse = _reverse_action(command_class)
+        for _ in range(STEPS_PER_CYCLE):
+            if not self._handle_events():
+                return None
+            env.step(reverse)
+            if overlay_fn:
+                overlay_fn()
+            _flip()
+        # Brake after reversal
+        for _ in range(STEPS_PER_CYCLE // 5):
+            env.step(REST_ACTION.copy())
 
         if self.strategy_name == "autocorrect":
             sorted_idx = np.argsort(probs)[::-1]
@@ -495,15 +503,6 @@ class EvaluationSession:
             abort = self._animate_command(env, screen, second_best, overlay_fn=overlay_fn)
             if abort:
                 return None
-        else:
-            # ErrP-Stop: just stay in place, render one cycle of stillness
-            for _ in range(STEPS_PER_CYCLE):
-                if not self._handle_events():
-                    return None
-                env.step(REST_ACTION.copy())
-                if overlay_fn:
-                    overlay_fn()
-                _flip()
         return True
 
     @staticmethod
