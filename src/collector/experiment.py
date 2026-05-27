@@ -12,6 +12,7 @@ COUNTDOWN_FROM = 5
 
 class ExperimentState(Enum):
     IDLE = auto()
+    WAITING = auto()
     COUNTDOWN = auto()
     CUE = auto()
     IMAGERY = auto()
@@ -26,6 +27,7 @@ class ExperimentSession(QObject):
     feedback_ready = pyqtSignal(TaskType, bool)  # predicted_task, is_correct
     progress_updated = pyqtSignal(int, int, int)  # trial_in_run, trials_per_run, current_run
     countdown_tick = pyqtSignal(int)  # seconds remaining
+    waiting_for_space = pyqtSignal()  # request user to press SPACE
     break_requested = pyqtSignal()
     finished = pyqtSignal()
 
@@ -72,7 +74,7 @@ class ExperimentSession(QObject):
         if self.lsl_client:
             self.lsl_client.start_recording()
         self._poll_timer.start(100)
-        self._start_countdown(self._start_run)
+        self._enter_waiting(self._start_run)
 
     def stop(self):
         self.running = False
@@ -96,14 +98,24 @@ class ExperimentSession(QObject):
             return
         self.paused = False
         if self.state == ExperimentState.BREAK:
-            self._start_countdown(self._start_run)
+            self._enter_waiting(self._start_run)
         else:
-            self._start_countdown(self._next_trial)
+            self._enter_waiting(self._next_trial)
 
     def resume_from_break(self):
         if self.state == ExperimentState.BREAK:
             self.paused = False
-            self._start_countdown(self._start_run)
+            self._enter_waiting(self._start_run)
+
+    def on_space_pressed(self):
+        if self.state == ExperimentState.WAITING:
+            self._start_countdown(self._waiting_callback)
+
+    def _enter_waiting(self, callback):
+        self._waiting_callback = callback
+        self.state = ExperimentState.WAITING
+        self.state_changed.emit(self.state)
+        self.waiting_for_space.emit()
 
     def _start_countdown(self, callback):
         self._countdown_remaining = COUNTDOWN_FROM

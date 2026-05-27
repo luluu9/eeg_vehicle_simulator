@@ -1,7 +1,7 @@
 import numpy as np
 import gymnasium as gym
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QImage, QPixmap, QPainter, QPainterPath, QColor, QFont, QPen, QBrush
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QImage, QPixmap, QPainter, QPainterPath, QColor, QFont, QPen, QBrush, QKeyEvent
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout
 
 from .config import TaskType
@@ -118,11 +118,30 @@ def draw_countdown_overlay(pixmap: QPixmap, seconds: int) -> QPixmap:
     return result
 
 
+def draw_top_bar(pixmap: QPixmap, text: str) -> QPixmap:
+    result = pixmap.copy()
+    painter = QPainter(result)
+    w = result.width()
+    font = QFont("Arial", 18)
+    fm = painter.fontMetrics()
+    bar_h = fm.height() + 20
+
+    painter.fillRect(0, 0, w, bar_h, QColor(0, 0, 0, 180))
+    painter.setPen(QPen(QColor(255, 255, 255)))
+    painter.setFont(font)
+    painter.drawText(0, 0, w, bar_h, Qt.AlignmentFlag.AlignCenter, text)
+
+    painter.end()
+    return result
+
+
 NOOP_ACTION = np.array([0.0, 0.0, 0.0], dtype=np.float32)
 SIM_INTERVAL_MS = 50
 
 
 class StimulusWindow(QWidget):
+    space_pressed = pyqtSignal()
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("BrainBot Stimulus")
@@ -140,6 +159,7 @@ class StimulusWindow(QWidget):
         self._overlay_task = None
         self._feedback_border = None
         self._countdown_value = None
+        self._waiting_text = None
 
         self._sim_timer = QTimer()
         self._sim_timer.timeout.connect(self._sim_step)
@@ -174,6 +194,14 @@ class StimulusWindow(QWidget):
         self._overlay_task = None
         self._feedback_border = None
         self._countdown_value = seconds
+        self._waiting_text = None
+
+    def show_waiting(self, text: str = "Press SPACE to continue"):
+        self._action = NOOP_ACTION
+        self._overlay_task = None
+        self._feedback_border = None
+        self._countdown_value = None
+        self._waiting_text = text
 
     def reset_env(self):
         self._stimulus.reset()
@@ -189,9 +217,24 @@ class StimulusWindow(QWidget):
             pixmap = draw_cue_overlay(pixmap, self._overlay_task)
         if self._feedback_border is not None:
             pixmap = draw_feedback_border(pixmap, self._feedback_border)
+
+        scaled = pixmap.scaled(
+            self._label.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+
         if self._countdown_value is not None:
-            pixmap = draw_countdown_overlay(pixmap, self._countdown_value)
-        self._set_pixmap(pixmap)
+            scaled = draw_countdown_overlay(scaled, self._countdown_value)
+        if self._waiting_text is not None:
+            scaled = draw_top_bar(scaled, self._waiting_text)
+        self._label.setPixmap(scaled)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Space and self._waiting_text is not None:
+            self._waiting_text = None
+            self.space_pressed.emit()
+        super().keyPressEvent(event)
 
     def _set_pixmap(self, pixmap: QPixmap):
         scaled = pixmap.scaled(

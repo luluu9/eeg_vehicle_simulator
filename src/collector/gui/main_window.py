@@ -123,6 +123,7 @@ class CollectorWindow(QMainWindow):
         self._refresh_timer.stop()
 
         self.stimulus_window = StimulusWindow()
+        self.stimulus_window.space_pressed.connect(self._on_space_pressed)
         self.stimulus_window.showFullScreen()
 
         self.experiment = ExperimentSession(
@@ -133,6 +134,7 @@ class CollectorWindow(QMainWindow):
         self.experiment.feedback_ready.connect(self._on_feedback)
         self.experiment.progress_updated.connect(self._on_progress)
         self.experiment.countdown_tick.connect(self._on_countdown)
+        self.experiment.waiting_for_space.connect(self._on_waiting)
         self.experiment.break_requested.connect(self._on_break)
         self.experiment.finished.connect(self._on_finished)
 
@@ -169,6 +171,15 @@ class CollectorWindow(QMainWindow):
         if self.stimulus_window:
             self.stimulus_window.show_countdown(seconds)
         self.status_label.setText(f"Starting in {seconds}...")
+
+    def _on_waiting(self):
+        if self.stimulus_window:
+            self.stimulus_window.show_waiting()
+        self.status_label.setText("Press SPACE to continue")
+
+    def _on_space_pressed(self):
+        if self.experiment:
+            self.experiment.on_space_pressed()
 
     def _on_task_changed(self, task: TaskType):
         if self.stimulus_window:
