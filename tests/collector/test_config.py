@@ -13,7 +13,7 @@ class TestCollectorConfig:
         assert config.n_runs == 10
         assert config.trials_per_run == 24
         assert config.error_rate == 0.3
-        assert config.break_after_run == 5
+        assert config.break_every_n_runs == 2
 
     def test_total_trials(self):
         config = CollectorConfig()

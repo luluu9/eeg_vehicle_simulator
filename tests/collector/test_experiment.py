@@ -18,7 +18,7 @@ def qapp():
 
 @pytest.fixture
 def session(qapp):
-    config = CollectorConfig(n_runs=2, trials_per_run=8, break_after_run=1)
+    config = CollectorConfig(n_runs=2, trials_per_run=8, break_every_n_runs=1)
     s = ExperimentSession(config)
     yield s
     s.stop()
@@ -69,16 +69,18 @@ class TestExperimentTrials:
             assert counts[task] == session.config.trials_per_class_per_run
 
     def test_total_trials_across_runs(self, qapp):
-        config = CollectorConfig(n_runs=3, trials_per_run=8, break_after_run=10)
+        config = CollectorConfig(n_runs=3, trials_per_run=8, break_every_n_runs=0)
         s = ExperimentSession(config)
         finished = []
         s.finished.connect(lambda: finished.append(True))
 
         s.start()
         # Simulate all timeouts (extra iterations for countdown between runs)
-        for _ in range(3 * 8 * 4 + 3 * COUNTDOWN_FROM):
+        for _ in range(3 * 8 * 4 + 3 * (COUNTDOWN_FROM + 1)):
             if s.state == ExperimentState.FINISHED:
                 break
+            if s.state == ExperimentState.WAITING:
+                s.on_space_pressed()
             s._on_timeout()
 
         assert len(finished) == 1
@@ -88,16 +90,18 @@ class TestExperimentTrials:
 
 class TestExperimentBreak:
     def test_break_after_configured_run(self, qapp):
-        config = CollectorConfig(n_runs=4, trials_per_run=4, break_after_run=2)
+        config = CollectorConfig(n_runs=4, trials_per_run=4, break_every_n_runs=2)
         s = ExperimentSession(config)
         breaks = []
         s.break_requested.connect(lambda: breaks.append(True))
 
         s.start()
         # Run through 2 runs (extra iterations for countdown)
-        for _ in range(2 * 4 * 4 + 2 * COUNTDOWN_FROM):
+        for _ in range(2 * 4 * 4 + 2 * (COUNTDOWN_FROM + 1)):
             if s.state == ExperimentState.BREAK:
                 break
+            if s.state == ExperimentState.WAITING:
+                s.on_space_pressed()
             s._on_timeout()
 
         assert len(breaks) == 1
@@ -105,18 +109,20 @@ class TestExperimentBreak:
         s.stop()
 
     def test_resume_from_break_continues(self, qapp):
-        config = CollectorConfig(n_runs=4, trials_per_run=4, break_after_run=2)
+        config = CollectorConfig(n_runs=4, trials_per_run=4, break_every_n_runs=2)
         s = ExperimentSession(config)
 
         s.start()
-        for _ in range(2 * 4 * 4 + 2 * COUNTDOWN_FROM):
+        for _ in range(2 * 4 * 4 + 2 * (COUNTDOWN_FROM + 1)):
             if s.state == ExperimentState.BREAK:
                 break
+            if s.state == ExperimentState.WAITING:
+                s.on_space_pressed()
             s._on_timeout()
 
         assert s.state == ExperimentState.BREAK
         s.resume_from_break()
-        assert s.state == ExperimentState.COUNTDOWN
+        assert s.state == ExperimentState.WAITING
         s.stop()
 
 

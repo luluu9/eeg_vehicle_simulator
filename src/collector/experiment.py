@@ -149,7 +149,8 @@ class ExperimentSession(QObject):
             if self.current_run >= self.config.n_runs:
                 self._finish()
                 return
-            if self.current_run == self.config.break_after_run:
+            if (self.config.break_every_n_runs > 0
+                    and self.current_run % self.config.break_every_n_runs == 0):
                 self.state = ExperimentState.BREAK
                 self.state_changed.emit(self.state)
                 self.break_requested.emit()

@@ -28,7 +28,7 @@ class CollectorConfig:
 
     n_runs: int = 10
     trials_per_run: int = 24
-    break_after_run: int = 5
+    break_every_n_runs: int = 2
 
     error_rate: float = 0.3
     sampling_rate: int = 2048
