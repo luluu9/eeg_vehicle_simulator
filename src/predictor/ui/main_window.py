@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                             QLabel, QPushButton, QSlider, QCheckBox, QGroupBox, QScrollArea, QDoubleSpinBox, QComboBox)
+                             QLabel, QPushButton, QSlider, QCheckBox, QGroupBox, QScrollArea, QDoubleSpinBox, QComboBox, QTabWidget, QListWidget, QListWidgetItem, QAbstractItemView)
 from PyQt6.QtCore import Qt, pyqtSlot, QTimer
 import pyqtgraph as pg
 import numpy as np
@@ -130,6 +130,149 @@ class ClassifierWidget(QGroupBox):
             x = np.arange(-len(vis_data) + 1, 1)
             self.lines[name].setData(x, vis_data)
 
+class EEGSignalTab(QWidget):
+    def __init__(self, engine: PredictorEngine):
+        super().__init__()
+        self.engine = engine
+        self.show_preprocessed = False
+        self.n_channels = 16
+        self.display_seconds = 5.0
+        self.active_channels = list(range(self.n_channels))
+        
+        self.init_ui()
+        
+        self.update_timer = QTimer()
+        self.update_timer.timeout.connect(self.refresh_plot)
+        
+    def set_active(self, active: bool):
+        if active:
+            self.update_timer.start(100)
+        else:
+            self.update_timer.stop()
+        
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        
+        ctrl_layout = QHBoxLayout()
+        self.preprocessed_cb = QCheckBox("Show Preprocessed")
+        self.preprocessed_cb.setChecked(False)
+        self.preprocessed_cb.toggled.connect(self.on_preprocessed_toggled)
+        ctrl_layout.addWidget(self.preprocessed_cb)
+        
+        self.autoscale_cb = QCheckBox("Autoscale")
+        self.autoscale_cb.setChecked(True)
+        ctrl_layout.addWidget(self.autoscale_cb)
+        
+        ctrl_layout.addWidget(QLabel("Window:"))
+        self.time_spin = QDoubleSpinBox()
+        self.time_spin.setRange(1.0, 30.0)
+        self.time_spin.setSingleStep(1.0)
+        self.time_spin.setSuffix(" s")
+        self.time_spin.setValue(self.display_seconds)
+        self.time_spin.valueChanged.connect(self.on_time_changed)
+        ctrl_layout.addWidget(self.time_spin)
+        
+        ctrl_layout.addStretch()
+        layout.addLayout(ctrl_layout)
+        
+        content_layout = QHBoxLayout()
+        
+        # Channel selector
+        self.channel_list = QListWidget()
+        self.channel_list.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+        self.channel_list.setMaximumWidth(100)
+        for i in range(self.n_channels):
+            item = QListWidgetItem(f"Ch{i+1}")
+            self.channel_list.addItem(item)
+            item.setSelected(True)
+        self.channel_list.itemSelectionChanged.connect(self.on_channel_selection_changed)
+        content_layout.addWidget(self.channel_list)
+        
+        # Plot
+        self.plot_widget = pg.PlotWidget()
+        self.plot_widget.setLabel('bottom', 'Time', 's')
+        self.plot_widget.setLabel('left', 'Channel')
+        self.plot_widget.showGrid(x=True, y=False)
+        self.plot_widget.setLimits(xMin=None, xMax=0)
+        content_layout.addWidget(self.plot_widget)
+        
+        layout.addLayout(content_layout)
+        
+        self.curves = []
+        for i in range(self.n_channels):
+            pen = pg.intColor(i, self.n_channels)
+            curve = self.plot_widget.plot(pen=pen)
+            self.curves.append(curve)
+        
+    def on_preprocessed_toggled(self, checked):
+        self.show_preprocessed = checked
+    
+    def on_time_changed(self, value):
+        self.display_seconds = value
+        
+    def on_channel_selection_changed(self):
+        self.active_channels = [i for i in range(self.channel_list.count())
+                                if self.channel_list.item(i).isSelected()]
+        for i in range(self.n_channels):
+            self.curves[i].setVisible(i in self.active_channels)
+        
+    def refresh_plot(self):
+        handler = self.engine.data_handler
+        if handler.srate == 0 or handler._total_samples == 0:
+            return
+            
+        data, timestamps = handler.get_latest_window(self.display_seconds)
+        if data is None:
+            return
+            
+        if self.show_preprocessed:
+            try:
+                data = self.engine.preprocessor.process(data, handler.srate)
+                fs = self.engine.preprocessor.target_srate
+            except Exception:
+                return
+        else:
+            if data.shape[0] > 16:
+                data = data[1:17, :]
+            fs = handler.srate
+            
+        n_samples = data.shape[1]
+        t = np.linspace(-n_samples / fs, 0, n_samples)
+        
+        if not self.show_preprocessed and self.autoscale_cb.isChecked():
+            active_data = data[self.active_channels] if len(self.active_channels) > 0 else data
+            global_std = np.std(active_data)
+            spacing = 2.0
+            visible_idx = 0
+            for i in range(min(self.n_channels, data.shape[0])):
+                if i in self.active_channels:
+                    ch = data[i]
+                    ch_normalized = (ch - np.mean(ch)) / (global_std if global_std > 0 else 1)
+                    self.curves[i].setData(t, ch_normalized + visible_idx * spacing)
+                    visible_idx += 1
+                else:
+                    self.curves[i].clear()
+        else:
+            spacing = np.std(data) * 4 if np.std(data) > 0 else 1
+            visible_idx = 0
+            for i in range(min(self.n_channels, data.shape[0])):
+                if i in self.active_channels:
+                    self.curves[i].setData(t, data[i] + visible_idx * spacing)
+                    visible_idx += 1
+                else:
+                    self.curves[i].clear()
+        
+        n_visible = len(self.active_channels)
+        self.plot_widget.setLimits(
+            xMin=-n_samples / fs, xMax=0,
+            yMin=-spacing, yMax=max(n_visible, 1) * spacing
+        )
+        self.plot_widget.setYRange(-spacing, max(n_visible, 1) * spacing)
+        self.plot_widget.getAxis('left').setTicks(
+            [[(i, f"Ch{ch+1}") for i, ch in enumerate(self.active_channels)]]
+        )
+
+
 class PredictorWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -190,18 +333,33 @@ class PredictorWindow(QMainWindow):
         
         main_layout.addLayout(top_bar)
         
-        # Scroll Area for Classifiers
+        # Tab Widget
+        self.tabs = QTabWidget()
+        
+        # Tab 1: Classifiers
+        classifiers_tab = QWidget()
+        classifiers_layout = QVBoxLayout(classifiers_tab)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         self.container = QWidget()
         self.container_layout = QVBoxLayout(self.container)
         scroll.setWidget(self.container)
+        classifiers_layout.addWidget(scroll)
+        self.tabs.addTab(classifiers_tab, "Classifiers")
         
-        main_layout.addWidget(scroll)
+        # Tab 2: EEG Signal
+        self.eeg_signal_tab = EEGSignalTab(self.engine)
+        self.tabs.addTab(self.eeg_signal_tab, "EEG Signal")
+        self.tabs.currentChanged.connect(self.on_tab_changed)
+        
+        main_layout.addWidget(self.tabs)
         
     def load_defaults(self):
         self.ground_truth_classifier = GroundTruthClassifier()
         self.add_classifier_ui(self.ground_truth_classifier)
+    
+    def on_tab_changed(self, index):
+        self.eeg_signal_tab.set_active(index == 1)
         
     def add_classifier_ui(self, clf):
         self.engine.add_classifier(clf)
