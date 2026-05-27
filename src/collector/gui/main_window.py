@@ -200,18 +200,9 @@ class CollectorWindow(QMainWindow):
         self.progress_bar.setValue(total_done)
 
     def _on_break(self):
-        if self.stimulus_window:
-            self.stimulus_window.show_idle()
-
-        QMessageBox.information(
-            self,
-            "Break",
-            "Halfway done! Take a break (up to 10 min).\n"
-            "Do not remove the EEG cap.\n\n"
-            "Press OK when ready to continue.",
-        )
         if self.experiment:
             self.experiment.resume_from_break()
+        self.status_label.setText("Break — press SPACE to continue")
 
     def _on_finished(self):
         subject = self.subject_input.text()
