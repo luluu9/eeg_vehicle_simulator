@@ -132,6 +132,7 @@ class CollectorWindow(QMainWindow):
         self.experiment.task_changed.connect(self._on_task_changed)
         self.experiment.feedback_ready.connect(self._on_feedback)
         self.experiment.progress_updated.connect(self._on_progress)
+        self.experiment.countdown_tick.connect(self._on_countdown)
         self.experiment.break_requested.connect(self._on_break)
         self.experiment.finished.connect(self._on_finished)
 
@@ -163,6 +164,11 @@ class CollectorWindow(QMainWindow):
                 task = self.experiment.current_task
                 self.stimulus_window.show_imagery(task)
         self.status_label.setText(state.name)
+
+    def _on_countdown(self, seconds: int):
+        if self.stimulus_window:
+            self.stimulus_window.show_countdown(seconds)
+        self.status_label.setText(f"Starting in {seconds}...")
 
     def _on_task_changed(self, task: TaskType):
         if self.stimulus_window:

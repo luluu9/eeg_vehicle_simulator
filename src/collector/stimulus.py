@@ -95,6 +95,29 @@ def draw_feedback_border(pixmap: QPixmap, is_correct: bool) -> QPixmap:
     return result
 
 
+def draw_countdown_overlay(pixmap: QPixmap, seconds: int) -> QPixmap:
+    result = pixmap.copy()
+    painter = QPainter(result)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    cx = int(result.width() * WHEELCHAIR_CENTER_X_RATIO)
+    cy = int(result.height() * WHEELCHAIR_CENTER_Y_RATIO)
+
+    font = QFont("Arial", 120, QFont.Weight.Bold)
+    painter.setFont(font)
+    painter.setPen(QPen(QColor(0, 100, 255)))
+
+    path = QPainterPath()
+    path.addText(0, 0, font, str(seconds))
+    br = path.boundingRect()
+    path.translate(cx - br.center().x(), cy - br.center().y())
+    painter.setBrush(QBrush(QColor(0, 100, 255, 180)))
+    painter.drawPath(path)
+
+    painter.end()
+    return result
+
+
 NOOP_ACTION = np.array([0.0, 0.0, 0.0], dtype=np.float32)
 SIM_INTERVAL_MS = 50
 
@@ -116,6 +139,7 @@ class StimulusWindow(QWidget):
         self._action = NOOP_ACTION
         self._overlay_task = None
         self._feedback_border = None
+        self._countdown_value = None
 
         self._sim_timer = QTimer()
         self._sim_timer.timeout.connect(self._sim_step)
@@ -125,21 +149,31 @@ class StimulusWindow(QWidget):
         self._action = NOOP_ACTION
         self._overlay_task = None
         self._feedback_border = None
+        self._countdown_value = None
 
     def show_cue(self, task: TaskType):
         self._action = NOOP_ACTION
         self._overlay_task = task
         self._feedback_border = None
+        self._countdown_value = None
 
     def show_imagery(self, task: TaskType):
         self._action = NOOP_ACTION
         self._overlay_task = task
         self._feedback_border = None
+        self._countdown_value = None
 
     def show_feedback(self, predicted_task: TaskType, is_correct: bool):
         self._action = ACTION_MAP[predicted_task]
         self._overlay_task = None
         self._feedback_border = is_correct
+        self._countdown_value = None
+
+    def show_countdown(self, seconds: int):
+        self._action = NOOP_ACTION
+        self._overlay_task = None
+        self._feedback_border = None
+        self._countdown_value = seconds
 
     def reset_env(self):
         self._stimulus.reset()
@@ -155,6 +189,8 @@ class StimulusWindow(QWidget):
             pixmap = draw_cue_overlay(pixmap, self._overlay_task)
         if self._feedback_border is not None:
             pixmap = draw_feedback_border(pixmap, self._feedback_border)
+        if self._countdown_value is not None:
+            pixmap = draw_countdown_overlay(pixmap, self._countdown_value)
         self._set_pixmap(pixmap)
 
     def _set_pixmap(self, pixmap: QPixmap):

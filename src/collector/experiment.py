@@ -7,8 +7,12 @@ from .classifier import MockClassifier
 from .config import TASK_LABELS, CollectorConfig, TaskType
 
 
+COUNTDOWN_FROM = 5
+
+
 class ExperimentState(Enum):
     IDLE = auto()
+    COUNTDOWN = auto()
     CUE = auto()
     IMAGERY = auto()
     FEEDBACK = auto()
@@ -21,6 +25,7 @@ class ExperimentSession(QObject):
     task_changed = pyqtSignal(TaskType)
     feedback_ready = pyqtSignal(TaskType, bool)  # predicted_task, is_correct
     progress_updated = pyqtSignal(int, int, int)  # trial_in_run, trials_per_run, current_run
+    countdown_tick = pyqtSignal(int)  # seconds remaining
     break_requested = pyqtSignal()
     finished = pyqtSignal()
 
@@ -44,6 +49,12 @@ class ExperimentSession(QObject):
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._on_timeout)
 
+        self._countdown_timer = QTimer()
+        self._countdown_timer.setSingleShot(True)
+        self._countdown_timer.timeout.connect(self._countdown_step)
+        self._countdown_remaining = 0
+        self._countdown_callback = None
+
         self._poll_timer = QTimer()
         self._poll_timer.timeout.connect(self._poll_data)
 
@@ -61,11 +72,12 @@ class ExperimentSession(QObject):
         if self.lsl_client:
             self.lsl_client.start_recording()
         self._poll_timer.start(100)
-        self._start_run()
+        self._start_countdown(self._start_run)
 
     def stop(self):
         self.running = False
         self._timer.stop()
+        self._countdown_timer.stop()
         self._poll_timer.stop()
         if self.lsl_client:
             self.lsl_client.stop_recording()
@@ -84,14 +96,32 @@ class ExperimentSession(QObject):
             return
         self.paused = False
         if self.state == ExperimentState.BREAK:
-            self._start_run()
+            self._start_countdown(self._start_run)
         else:
-            self._next_trial()
+            self._start_countdown(self._next_trial)
 
     def resume_from_break(self):
         if self.state == ExperimentState.BREAK:
             self.paused = False
-            self._start_run()
+            self._start_countdown(self._start_run)
+
+    def _start_countdown(self, callback):
+        self._countdown_remaining = COUNTDOWN_FROM
+        self._countdown_callback = callback
+        self.state = ExperimentState.COUNTDOWN
+        self.state_changed.emit(self.state)
+        self.countdown_tick.emit(self._countdown_remaining)
+        self._countdown_timer.start(1000)
+
+    def _countdown_step(self):
+        self._countdown_remaining -= 1
+        if self._countdown_remaining <= 0:
+            cb = self._countdown_callback
+            self._countdown_callback = None
+            cb()
+        else:
+            self.countdown_tick.emit(self._countdown_remaining)
+            self._countdown_timer.start(1000)
 
     def _start_run(self):
         self.trial_sequence = self.config.generate_trial_sequence()
@@ -155,7 +185,9 @@ class ExperimentSession(QObject):
         self._timer.start(int(self.config.feedback_duration * 1000))
 
     def _on_timeout(self):
-        if self.state == ExperimentState.IDLE:
+        if self.state == ExperimentState.COUNTDOWN:
+            self._countdown_step()
+        elif self.state == ExperimentState.IDLE:
             self._enter_cue()
         elif self.state == ExperimentState.CUE:
             self._enter_imagery()

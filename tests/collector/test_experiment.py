@@ -7,7 +7,7 @@ from PyQt6.QtCore import QCoreApplication
 from PyQt6.QtWidgets import QApplication
 
 from src.collector.config import CollectorConfig, TaskType
-from src.collector.experiment import ExperimentSession, ExperimentState
+from src.collector.experiment import ExperimentSession, ExperimentState, COUNTDOWN_FROM
 
 
 @pytest.fixture(scope="session")
@@ -75,8 +75,8 @@ class TestExperimentTrials:
         s.finished.connect(lambda: finished.append(True))
 
         s.start()
-        # Simulate all timeouts
-        for _ in range(3 * 8 * 4):  # runs * trials * states_per_trial
+        # Simulate all timeouts (extra iterations for countdown between runs)
+        for _ in range(3 * 8 * 4 + 3 * COUNTDOWN_FROM):
             if s.state == ExperimentState.FINISHED:
                 break
             s._on_timeout()
@@ -94,8 +94,8 @@ class TestExperimentBreak:
         s.break_requested.connect(lambda: breaks.append(True))
 
         s.start()
-        # Run through 2 runs (2 * 4 trials * 4 states)
-        for _ in range(2 * 4 * 4):
+        # Run through 2 runs (extra iterations for countdown)
+        for _ in range(2 * 4 * 4 + 2 * COUNTDOWN_FROM):
             if s.state == ExperimentState.BREAK:
                 break
             s._on_timeout()
@@ -109,14 +109,14 @@ class TestExperimentBreak:
         s = ExperimentSession(config)
 
         s.start()
-        for _ in range(2 * 4 * 4):
+        for _ in range(2 * 4 * 4 + 2 * COUNTDOWN_FROM):
             if s.state == ExperimentState.BREAK:
                 break
             s._on_timeout()
 
         assert s.state == ExperimentState.BREAK
         s.resume_from_break()
-        assert s.state != ExperimentState.BREAK
+        assert s.state == ExperimentState.COUNTDOWN
         s.stop()
 
 
