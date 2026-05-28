@@ -110,6 +110,12 @@ class ExperimentSession(QObject):
     def on_space_pressed(self):
         if self.state == ExperimentState.WAITING:
             self._start_countdown(self._waiting_callback)
+        elif self.state in (ExperimentState.IDLE, ExperimentState.CUE,
+                            ExperimentState.IMAGERY, ExperimentState.FEEDBACK,
+                            ExperimentState.COUNTDOWN):
+            self._timer.stop()
+            self._countdown_timer.stop()
+            self._enter_waiting(self._next_trial)
 
     def _enter_waiting(self, callback):
         self._waiting_callback = callback

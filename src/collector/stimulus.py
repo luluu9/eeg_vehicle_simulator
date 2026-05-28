@@ -231,7 +231,7 @@ class StimulusWindow(QWidget):
         self._label.setPixmap(scaled)
 
     def keyPressEvent(self, event: QKeyEvent):
-        if event.key() == Qt.Key.Key_Space and self._waiting_text is not None:
+        if event.key() == Qt.Key.Key_Space:
             self._waiting_text = None
             self.space_pressed.emit()
         super().keyPressEvent(event)
