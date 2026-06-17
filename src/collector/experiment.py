@@ -218,9 +218,10 @@ class ExperimentSession(QObject):
             self._next_trial()
 
     def _emit_marker(self, marker: int):
-        if self.data_logger and self.lsl_client and self.lsl_client.lsl_offset is not None:
-            timestamp = local_clock() - self.lsl_client.lsl_offset
-            self.data_logger.add_event(timestamp, marker)
+        if self.data_logger and self.lsl_client:
+            timestamp = local_clock()
+            lsl_offset = self.lsl_client.inlet.time_correction()
+            self.data_logger.add_event(timestamp - lsl_offset, marker)
 
     def _poll_data(self):
         if self.lsl_client and self.data_logger:
