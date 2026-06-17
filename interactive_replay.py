@@ -229,6 +229,17 @@ if __name__ == "__main__":
     start_event.wait()
     print("Player Ready!")
     
+    errp_info = StreamInfo(
+        name="ErrP_Simulator",
+        type="ErrP_Detection",
+        channel_count=2,
+        nominal_srate=0.0,
+        channel_format='float32',
+        source_id="errp_simulator_001",
+    )
+    errp_outlet = StreamOutlet(errp_info)
+    print("ErrP outlet created.")
+    
     print("\n" + "="*40)
     print("INTERACTIVE EEG REPLAY CONTROLLER")
     print("="*40)
@@ -238,6 +249,8 @@ if __name__ == "__main__":
     print("  [3] Right Hand")
     print("  [4] Both Hands")
     print("  [5] Both Feet")
+    print("  [E] Trigger ErrP (error)")
+    print("  [C] Trigger ErrP (correct)")
     print("  [Q] Quit")
     print("="*40)
     print("Current State: Relax (1)")
@@ -256,7 +269,13 @@ if __name__ == "__main__":
                     print("Quitting...")
                     break
                     
-                if char in ['1', '2', '3', '4', '5']:
+                if char == 'e':
+                    errp_outlet.push_sample([0.1, 0.9])
+                    print(" -> ErrP triggered: ERROR (p_correct=0.1, p_error=0.9)")
+                elif char == 'c':
+                    errp_outlet.push_sample([0.9, 0.1])
+                    print(" -> ErrP triggered: CORRECT (p_correct=0.9, p_error=0.1)")
+                elif char in ['1', '2', '3', '4', '5']:
                     cmd = int(char)
                     names = {1:"Relax", 2:"Left", 3:"Right", 4:"Both", 5:"Feet"}
                     print(f" -> Setting state to {cmd} ({names[cmd]})")
