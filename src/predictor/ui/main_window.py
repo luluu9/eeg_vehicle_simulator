@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                             QLabel, QPushButton, QSlider, QCheckBox, QGroupBox, QScrollArea, QDoubleSpinBox, QComboBox, QTabWidget, QListWidget, QListWidgetItem, QAbstractItemView)
+                             QLabel, QPushButton, QSlider, QCheckBox, QGroupBox, QScrollArea, QDoubleSpinBox, QSpinBox, QComboBox, QTabWidget, QListWidget, QListWidgetItem, QAbstractItemView)
 from PyQt6.QtCore import Qt, pyqtSlot, QTimer
 import pyqtgraph as pg
 import numpy as np
@@ -70,6 +70,11 @@ class ClassifierWidget(QGroupBox):
         self.history_plot.setYRange(0, 1)
         self.history_plot.showGrid(x=True, y=True)
         self.history_plot.addLegend()
+        # Background region highlighting the current majority-vote class
+        self.vote_region = pg.LinearRegionItem(values=(0, 0), movable=False)
+        self.vote_region.setZValue(-10)
+        self.history_plot.addItem(self.vote_region)
+        self.vote_size = 50
         self.lines = {}
         for idx, name in enumerate(PREDICTOR_CLASS_NAMES):
             self.lines[name] = self.history_plot.plot(pen=PREDICTOR_CLASS_COLORS[idx], name=PREDICTOR_DISPLAY_NAMES[idx])
@@ -118,6 +123,14 @@ class ClassifierWidget(QGroupBox):
     def set_history_length(self, length: int):
         self.visible_history = length
         self._refresh_lines()
+
+    def update_majority(self, histogram):
+        majority = int(np.argmax(histogram))
+        color = pg.mkColor(PREDICTOR_CLASS_COLORS[majority])
+        color.setAlpha(40)
+        self.vote_region.setBrush(pg.mkBrush(color))
+        span = min(self.vote_size, self.visible_history)
+        self.vote_region.setRegion((-span + 1, 0))
         
     def _refresh_lines(self):
         for name in PREDICTOR_CLASS_NAMES:
@@ -283,6 +296,7 @@ class PredictorWindow(QMainWindow):
         
         self.engine = PredictorEngine()
         self.engine.prediction_made.connect(self.on_prediction)
+        self.engine.aggregate_made.connect(self.on_aggregate)
         self.engine.error_occurred.connect(self.on_error)
         
         self.widgets = {} # name -> ClassifierWidget
@@ -317,11 +331,19 @@ class PredictorWindow(QMainWindow):
         
         top_bar.addWidget(QLabel("Global Interval:"))
         self.interval_spin = QDoubleSpinBox()
-        self.interval_spin.setRange(0.1, 5.0)
-        self.interval_spin.setSingleStep(0.1)
-        self.interval_spin.setValue(2.0)
+        self.interval_spin.setDecimals(2)
+        self.interval_spin.setRange(0.01, 5.0)
+        self.interval_spin.setSingleStep(0.01)
+        self.interval_spin.setValue(0.02)
         self.interval_spin.valueChanged.connect(self.engine.set_interval)
         top_bar.addWidget(self.interval_spin)
+
+        top_bar.addWidget(QLabel("Vote Buffer:"))
+        self.vote_spin = QSpinBox()
+        self.vote_spin.setRange(1, 500)
+        self.vote_spin.setValue(50)
+        self.vote_spin.valueChanged.connect(self.update_vote_size)
+        top_bar.addWidget(self.vote_spin)
 
         top_bar.addWidget(QLabel("History (10-200):"))
         self.history_slider = QSlider(Qt.Orientation.Horizontal)
@@ -366,12 +388,18 @@ class PredictorWindow(QMainWindow):
     def add_classifier_ui(self, clf):
         self.engine.add_classifier(clf)
         widget = ClassifierWidget(clf.name, clf.min_window, clf.max_window, self.engine)
+        widget.vote_size = self.vote_spin.value()
         self.container_layout.addWidget(widget)
         self.widgets[clf.name] = widget
     
     def update_history_length(self, val):
         for w in self.widgets.values():
             w.set_history_length(val)
+
+    def update_vote_size(self, val):
+        self.engine.set_vote_size(val)
+        for w in self.widgets.values():
+            w.vote_size = val
 
     def refresh_streams(self):
         streams = self.engine.find_streams()
@@ -415,6 +443,11 @@ class PredictorWindow(QMainWindow):
     def on_prediction(self, name, probs, latency):
         if name in self.widgets:
             self.widgets[name].update_viz(probs, latency)
+
+    @pyqtSlot(str, object) # object=np.ndarray
+    def on_aggregate(self, name, histogram):
+        if name in self.widgets:
+            self.widgets[name].update_majority(histogram)
             
     @pyqtSlot(str)
     def on_error(self, msg):

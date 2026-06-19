@@ -3,21 +3,31 @@ from pylsl import local_clock
 from .lsl_io import DataHandler, PredictionBroadcaster
 from .classifiers import BaseClassifier
 from .preprocessor import EEGPreprocessor
+from collections import deque
 import numpy as np
 
+DEFAULT_VOTE_SIZE = 50
+DEFAULT_INTERVAL = 0.02
+
 class ClassifierState:
-    def __init__(self, classifier: BaseClassifier):
+    def __init__(self, classifier: BaseClassifier, vote_size: int = DEFAULT_VOTE_SIZE):
         self.classifier = classifier
         self.broadcaster = PredictionBroadcaster(classifier.name, channel_count=classifier.output_size)
         # Default target to min or reasonable middle
         self.target_window = classifier.min_window
         self.active = True
         # History for visualization (simple list of last N predictions)
-        self.history = [] 
+        self.history = []
+        # Rolling buffer of recent argmax decisions for majority voting
+        self.vote_buffer = deque(maxlen=vote_size)
+
+    def set_vote_size(self, vote_size: int):
+        self.vote_buffer = deque(self.vote_buffer, maxlen=vote_size)
 
 class PredictorEngine(QObject):
     # Signals
     prediction_made = pyqtSignal(str, np.ndarray, float) # clf_name, probs, latency
+    aggregate_made = pyqtSignal(str, np.ndarray) # clf_name, vote histogram
     error_occurred = pyqtSignal(str)
     
     def __init__(self):
@@ -25,25 +35,31 @@ class PredictorEngine(QObject):
         self.data_handler = DataHandler()
         self.preprocessor = EEGPreprocessor(target_srate=256.0)
         self.classifiers = {} # name -> ClassifierState
+        self._vote_size = DEFAULT_VOTE_SIZE
         
         # Main Loop Timer
         self.timer = QTimer()
         self.timer.timeout.connect(self._tick)
-        self._interval = 2.0
+        self._interval = DEFAULT_INTERVAL
         
     def add_classifier(self, clf: BaseClassifier):
         if clf.name in self.classifiers:
             print(f"Classifier {clf.name} already exists.")
             return
             
-        state = ClassifierState(clf)
+        state = ClassifierState(clf, vote_size=self._vote_size)
         self.classifiers[clf.name] = state
         print(f"Added classifier: {clf.name}")
         
     def set_interval(self, seconds: float):
-        self._interval = max(0.1, min(5.0, seconds))
+        self._interval = max(0.01, min(5.0, seconds))
         if self.timer.isActive():
             self.timer.start(int(self._interval * 1000))
+
+    def set_vote_size(self, n: int):
+        self._vote_size = max(1, int(n))
+        for state in self.classifiers.values():
+            state.set_vote_size(self._vote_size)
             
     def set_classifier_window(self, name: str, window_sec: float):
         if name in self.classifiers:
@@ -109,7 +125,15 @@ class PredictorEngine(QObject):
             
             try:
                 probs = state.classifier.predict_proba(input_slice, proc_fs)
-                state.broadcaster.push_prediction(probs)
+
+                # Majority voting over the rolling buffer of recent decisions
+                state.vote_buffer.append(int(np.argmax(probs)))
+                output_size = state.classifier.output_size
+                counts = np.bincount(state.vote_buffer, minlength=output_size).astype(np.float32)
+                histogram = counts / counts.sum()
+
+                # Broadcast the aggregated decision (normalized vote histogram)
+                state.broadcaster.push_prediction(histogram)
                 
                 # Calculate latency (freshness of data)
                 # timestamps corresponds to data. Since we slice processed_data, assume linear time.
@@ -124,6 +148,7 @@ class PredictorEngine(QObject):
                     latency = now - last_ts
                 
                 self.prediction_made.emit(name, probs, latency)
+                self.aggregate_made.emit(name, histogram)
                 
             except Exception as e:
                 print(f"Error in {name}: {e}")
