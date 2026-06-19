@@ -196,6 +196,7 @@ class GroundTruthClassifier(BaseClassifier):
         super().__init__()
         self._name = "Ground Truth"
         self.latest_label_idx = 0 # Default Relax
+        self.n_marker_channels = N_LEGACY_CLASSES # Updated from the stream
         self.running = False
         
     @property
@@ -249,15 +250,17 @@ class GroundTruthClassifier(BaseClassifier):
                     if delay > 0:
                         time.sleep(delay)
                         
-                    # Legacy annotations may still arrive as a 5-channel one-hot vector.
-                    # We map that to the 4-class study output by dropping both_hands.
+                    # The annotation stream is a one-hot vector. Its width tells
+                    # us the labelling scheme: legacy files use 5 channels
+                    # (5=Both Feet), newer files use 4 channels (4=Both Feet).
                     # sample is a list of floats, e.g. [0, 1, 0, 0, 0]
                     # We accept 1 or -1 as active
                     arr = np.abs(np.array(sample))
+                    self.n_marker_channels = len(arr)
                     
                     # Find max. If all zero, remain the same
                     if np.max(arr) > 0.1:
-                        self.latest_label_idx = np.argmax(arr)
+                        self.latest_label_idx = int(np.argmax(arr))
                     
             except Exception as e:
                 print(f"GroundTruth Error: {e}")
@@ -265,6 +268,16 @@ class GroundTruthClassifier(BaseClassifier):
 
     def predict_proba(self, data: np.ndarray, fs: float) -> np.ndarray:
         # Ignore EEG data, return ground truth
+        if self.n_marker_channels <= N_STUDY_CLASSES:
+            # New 4-class one-hot: index maps directly to the study class index
+            # (0=Rest, 1=Left, 2=Right, 3=Forward/Feet).
+            probs = np.zeros(self.output_size)
+            if 0 <= self.latest_label_idx < self.output_size:
+                probs[self.latest_label_idx] = 1.0
+            else:
+                print(f"GroundTruth: Invalid label index: {self.latest_label_idx}")
+            return probs
+
         legacy_probs = np.zeros(N_LEGACY_CLASSES)
         if 0 <= self.latest_label_idx < N_LEGACY_CLASSES:
             legacy_probs[self.latest_label_idx] = 1.0

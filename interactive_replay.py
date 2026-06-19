@@ -8,7 +8,7 @@ import sys
 import os
 
 # Configuration
-DEFAULT_FILE = r"data_organized\subject3_ses4_run3_20260121_210246_raw.fif"
+DEFAULT_FILE = r"data_new\SUBJ1_runfull_20260523_215133_raw.fif"
 STREAM_NAME = "test-player"
 DEBUG_FILE = False
 
@@ -20,25 +20,41 @@ class InteractiveLSLPlayer:
         self.sfreq = raw.info["sfreq"]
         self.n_channels = len(raw.ch_names)
         
-        # Mapping for display
-        self.class_names = {
-            1: "Relax",
-            2: "Left Hand",
-            3: "Right Hand", 
-            4: "Both Hands",
-            5: "Both Feet"
-        }
+        # Detect which motor classes are present and build display mapping.
+        # Legacy files have classes 1-5 (4=Both Hands, 5=Feet).
+        # Newer files have classes 1-4 with no Both Hands (4=Feet).
+        self.present_classes = self._detect_classes()
+        self.class_names = self._build_class_names(self.present_classes)
+        self.n_marker_channels = max(self.present_classes)
         
         # Pre-process data
         self._prepare_data_segments()
+
+    def _detect_classes(self):
+        """Find which class ids (1-5) are present in the file's annotations."""
+        candidates = {'1', '2', '3', '4', '5'}
+        present = sorted(
+            {int(d) for d in self.raw.annotations.description if d in candidates}
+        )
+        if not present:
+            raise ValueError("No motor-imagery class annotations (1-5) found in file.")
+        return present
+
+    def _build_class_names(self, present):
+        """Map class ids to labels, accounting for the missing Both Hands class."""
+        if 5 in present:
+            names = {1: "Relax", 2: "Left Hand", 3: "Right Hand", 4: "Both Hands", 5: "Feet"}
+        else:
+            names = {1: "Relax", 2: "Left Hand", 3: "Right Hand", 4: "Feet"}
+        return {c: names.get(c, f"Class {c}") for c in present}
         
     def _prepare_data_segments(self):
         """Extract data segments for each class."""
         print("Preparing data segments...")
-        self.segments = {1: [], 2: [], 3: [], 4: [], 5: []}
+        self.segments = {cid: [] for cid in self.present_classes}
         
         # Classes of interest
-        keep_desc = ['1', '2', '3', '4', '5']
+        keep_desc = [str(cid) for cid in self.present_classes]
         data = self.raw.get_data()
         fs = self.sfreq
         
@@ -62,8 +78,8 @@ class InteractiveLSLPlayer:
                 if segment.shape[0] > 0:
                     self.segments[class_id].append(segment)
                     
-        # Verify we have data for all classes
-        for cid in [1, 2, 3, 4, 5]:
+        # Verify we have data for all detected classes
+        for cid in self.present_classes:
             if not self.segments[cid]:
                 raise ValueError(f"No data found for class {cid} ({self.class_names[cid]})")
             else:
@@ -83,9 +99,9 @@ class InteractiveLSLPlayer:
         outfile = StreamOutlet(info)
         
         annot_name = f"{self.name}-annotations"
-        annot_info = StreamInfo(name=annot_name, type='Markers', channel_count=5, nominal_srate=self.sfreq, channel_format='float32', source_id=self.name+'_markers')
+        annot_info = StreamInfo(name=annot_name, type='Markers', channel_count=self.n_marker_channels, nominal_srate=self.sfreq, channel_format='float32', source_id=self.name+'_markers')
         achns = annot_info.desc().append_child("channels")
-        for i in range(1, 6):
+        for i in range(1, self.n_marker_channels + 1):
             achns.append_child("channel").append_child_value("label", str(i))
             
         annot_outfile = StreamOutlet(annot_info)
@@ -93,7 +109,7 @@ class InteractiveLSLPlayer:
         print("Stream initialized. Ready.")
         start_event.set()
         
-        current_class = 1 # Default to Relax
+        current_class = 1 if 1 in self.present_classes else self.present_classes[0] # Default to Relax
         current_segment_idx = 0
         current_sample_idx = 0
         
@@ -110,7 +126,7 @@ class InteractiveLSLPlayer:
             while not command_queue.empty():
                 try:
                     cmd = command_queue.get_nowait()
-                    if cmd in [1, 2, 3, 4, 5]:
+                    if cmd in self.segments:
                         if cmd != current_class:
                             print(f"[Player] Switching to {self.class_names[cmd]}")
                             current_class = cmd
@@ -152,7 +168,7 @@ class InteractiveLSLPlayer:
             final_chunk = np.vstack(chunk_data)
             
             # Re-create Annotation Chunk
-            annot_vec = np.zeros(5, dtype=np.float32)
+            annot_vec = np.zeros(self.n_marker_channels, dtype=np.float32)
             annot_vec[current_class - 1] = 1.0
             annot_chunk = np.tile(annot_vec, (chunk_size, 1))
             
@@ -194,7 +210,7 @@ class InteractiveLSLPlayer:
             last_t = next_t
 
 
-def player_process_wrapper(raw_path, command_queue, start_event):
+def player_process_wrapper(raw_path, command_queue, start_event, info_queue):
     print(f"Loading {raw_path}...")
     try:
         raw = read_raw_fif(raw_path, preload=True, verbose=False)
@@ -203,6 +219,7 @@ def player_process_wrapper(raw_path, command_queue, start_event):
         return
         
     player = InteractiveLSLPlayer(raw, STREAM_NAME)
+    info_queue.put(player.class_names)
     player.run(command_queue, start_event)
 
 
@@ -221,13 +238,16 @@ if __name__ == "__main__":
     
     start_event = mp.Event()
     command_queue = mp.Queue()
+    info_queue = mp.Queue()
     
-    process = mp.Process(target=player_process_wrapper, args=(file_path, command_queue, start_event), daemon=True)
+    process = mp.Process(target=player_process_wrapper, args=(file_path, command_queue, start_event, info_queue), daemon=True)
     process.start()
     
     print("Waiting for player to initialize...")
     start_event.wait()
     print("Player Ready!")
+    
+    class_names = info_queue.get()
     
     errp_info = StreamInfo(
         name="ErrP_Simulator",
@@ -244,16 +264,14 @@ if __name__ == "__main__":
     print("INTERACTIVE EEG REPLAY CONTROLLER")
     print("="*40)
     print("Controls:")
-    print("  [1] Relax")
-    print("  [2] Left Hand")
-    print("  [3] Right Hand")
-    print("  [4] Both Hands")
-    print("  [5] Both Feet")
+    for cid in sorted(class_names):
+        print(f"  [{cid}] {class_names[cid]}")
     print("  [E] Trigger ErrP (error)")
     print("  [C] Trigger ErrP (correct)")
     print("  [Q] Quit")
     print("="*40)
-    print("Current State: Relax (1)")
+    default_class = 1 if 1 in class_names else min(class_names)
+    print(f"Current State: {class_names[default_class]} ({default_class})")
     
     try:
         while True:
@@ -275,10 +293,9 @@ if __name__ == "__main__":
                 elif char == 'c':
                     errp_outlet.push_sample([0.9, 0.1])
                     print(" -> ErrP triggered: CORRECT (p_correct=0.9, p_error=0.1)")
-                elif char in ['1', '2', '3', '4', '5']:
+                elif char in ['1', '2', '3', '4', '5'] and int(char) in class_names:
                     cmd = int(char)
-                    names = {1:"Relax", 2:"Left", 3:"Right", 4:"Both", 5:"Feet"}
-                    print(f" -> Setting state to {cmd} ({names[cmd]})")
+                    print(f" -> Setting state to {cmd} ({class_names[cmd]})")
                     command_queue.put(cmd)
             
             time.sleep(0.05)

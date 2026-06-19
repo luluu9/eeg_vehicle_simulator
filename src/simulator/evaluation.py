@@ -465,16 +465,24 @@ class EvaluationSession:
         action = study_action(command_class)
         _get_marker_outlet().push_sample([ErrPConfig.MOVEMENT_ONSET_MARKER])
 
-        for step in range(STEPS_PER_CYCLE):
+        brake_steps = STEPS_PER_CYCLE // 5
+        move_steps = STEPS_PER_CYCLE - brake_steps
+
+        for step in range(move_steps):
             if not self._handle_events():
                 return True
             env.step(action)
             if overlay_fn:
                 overlay_fn()
             _flip()
-        # Brake to stop residual momentum
-        for _ in range(STEPS_PER_CYCLE // 5):
+        # Gradual deceleration (rendered) in remaining steps
+        for step in range(brake_steps):
+            if not self._handle_events():
+                return True
             env.step(REST_ACTION.copy())
+            if overlay_fn:
+                overlay_fn()
+            _flip()
         return False
 
     def _apply_errp(self, env, screen, errp_prob: float, command_class: int, probs: np.ndarray, overlay_fn=None):
@@ -486,16 +494,24 @@ class EvaluationSession:
 
         # Animate reverse movement (MI commands paused during reversal)
         reverse = _reverse_action(command_class)
-        for _ in range(STEPS_PER_CYCLE):
+        brake_steps = STEPS_PER_CYCLE // 5
+        move_steps = STEPS_PER_CYCLE - brake_steps
+
+        for _ in range(move_steps):
             if not self._handle_events():
                 return None
             env.step(reverse)
             if overlay_fn:
                 overlay_fn()
             _flip()
-        # Brake after reversal
-        for _ in range(STEPS_PER_CYCLE // 5):
+        # Gradual deceleration (rendered)
+        for _ in range(brake_steps):
+            if not self._handle_events():
+                return None
             env.step(REST_ACTION.copy())
+            if overlay_fn:
+                overlay_fn()
+            _flip()
 
         if self.strategy_name == "autocorrect":
             sorted_idx = np.argsort(probs)[::-1]

@@ -9,6 +9,8 @@ from ...common.constants import StudyClass
 
 
 PREDICTOR_CLASS_NAMES = [study_class.name for study_class in StudyClass]
+PREDICTOR_DISPLAY_OVERRIDES = {"FORWARD": "UP"}
+PREDICTOR_DISPLAY_NAMES = [PREDICTOR_DISPLAY_OVERRIDES.get(name, name) for name in PREDICTOR_CLASS_NAMES]
 PREDICTOR_CLASS_COLORS = ['g', 'r', 'b', 'c']
 
 class ClassifierWidget(QGroupBox):
@@ -60,7 +62,7 @@ class ClassifierWidget(QGroupBox):
         self.bar_plot.addItem(self.bar_items)
         # Fix axis
         self.bar_plot.setYRange(0, 1)
-        self.bar_plot.getAxis('bottom').setTicks([list(zip(range(len(PREDICTOR_CLASS_NAMES)), PREDICTOR_CLASS_NAMES))])
+        self.bar_plot.getAxis('bottom').setTicks([list(zip(range(len(PREDICTOR_DISPLAY_NAMES)), PREDICTOR_DISPLAY_NAMES))])
         viz_layout.addWidget(self.bar_plot)
         
         # 2. History Line Chart
@@ -70,7 +72,7 @@ class ClassifierWidget(QGroupBox):
         self.history_plot.addLegend()
         self.lines = {}
         for idx, name in enumerate(PREDICTOR_CLASS_NAMES):
-            self.lines[name] = self.history_plot.plot(pen=PREDICTOR_CLASS_COLORS[idx], name=name)
+            self.lines[name] = self.history_plot.plot(pen=PREDICTOR_CLASS_COLORS[idx], name=PREDICTOR_DISPLAY_NAMES[idx])
             
         viz_layout.addWidget(self.history_plot)
         
