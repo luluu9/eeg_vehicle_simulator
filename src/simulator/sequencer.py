@@ -3,8 +3,8 @@ from dataclasses import dataclass, field
 
 
 TASKS = ["A", "B"]
-STRATEGIES = ["baseline", "stop", "autocorrect"]
-ERRP_STRATEGIES = {"stop", "autocorrect"}
+STRATEGIES = ["baseline", "errp"]
+ERRP_STRATEGIES = {"errp"}
 
 
 @dataclass

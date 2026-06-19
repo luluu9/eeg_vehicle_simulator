@@ -7,7 +7,7 @@ import pygame
 from pylsl import StreamInfo, StreamOutlet
 
 from .input_handler import MultiStreamMonitor
-from .strategies import STUDY_STRATEGIES, REST_ACTION
+from .strategies import REST_ACTION
 from .controller import MovementController
 from ..common.constants import StudyClass, ErrPConfig
 from .metrics import MetricsCollector
@@ -15,19 +15,14 @@ from .tasks import (
     TASK_A_GOALS, GoalChecker, GoalType, TrajectoryTask, Waypoint,
     get_wheelchair_state, create_default_trajectory, _normalize_angle,
 )
-from gymnasium.envs.box2d.wheelchair_dynamics import WHEELCHAIR_WIDTH, WHEELCHAIR_LENGTH
+from gymnasium.envs.box2d.wheelchair_dynamics import WHEELCHAIR_WIDTH
 from gymnasium.envs.box2d.wheelchair_racing import (
     WHEELCHAIR_CENTER_X_RATIO, WHEELCHAIR_CENTER_Y_RATIO,
     WINDOW_W, WINDOW_H, ZOOM, SCALE, FPS as PHYSICS_FPS,
 )
 
-# ── Discrete Command Cycle Parameters ────────────────────────────────────────
-T_CYCLE = 1.0  # seconds per command cycle
-FORWARD_DISPLACEMENT = WHEELCHAIR_LENGTH  # Box2D units per forward command (= 1 real meter)
-ROTATION_DISPLACEMENT = math.radians(15)  # radians per rotation command
 ERRP_THRESHOLD = 0.50  # probability threshold for ErrP error detection
 ERRP_ACTION_DELAY = 0.0  # seconds to wait before reacting to an ErrP (tune experimentally)
-STEPS_PER_CYCLE = int(T_CYCLE * PHYSICS_FPS)  # physics steps per animation
 
 # ── Feedback Marker Outlet ────────────────────────────────────────────────────
 _marker_outlet: StreamOutlet | None = None
@@ -220,30 +215,6 @@ def _install_path_renderer(env, trajectory):
 
     import types
     car.draw = types.MethodType(patched_draw, car)
-
-
-def _get_errp_prob(errp_data: dict) -> float:
-    if not errp_data:
-        return 0.0
-    for probs in errp_data.values():
-        return float(probs[1]) if len(probs) >= 2 else 0.0
-    return 0.0
-
-
-# ── Discrete Command Helpers ─────────────────────────────────────────────────
-
-from .strategies import study_action
-
-REVERSE_ACTION_MAP = {
-    StudyClass.REST.value: REST_ACTION,
-    StudyClass.LEFT.value: np.array([0.5, 0.3, 0.0], dtype=np.float32),
-    StudyClass.RIGHT.value: np.array([-0.5, 0.3, 0.0], dtype=np.float32),
-    StudyClass.FORWARD.value: np.array([0.0, -0.3, 0.0], dtype=np.float32),
-}
-
-
-def _reverse_action(command_class: int) -> np.ndarray:
-    return REVERSE_ACTION_MAP.get(command_class, REST_ACTION).copy()
 
 
 # ── Intermission ─────────────────────────────────────────────────────────────
@@ -502,11 +473,6 @@ class EvaluationSession:
         if self.mi_channel in mi_probs:
             return self.mi_channel
         return None
-
-    def _pick_errp(self, errp_data: dict) -> dict:
-        if self.errp_channel and self.errp_channel in errp_data:
-            return {self.errp_channel: errp_data[self.errp_channel]}
-        return {}
 
     def _pick_errp_with_ts(self, errp_data: dict) -> dict:
         if self.errp_channel and self.errp_channel in errp_data:
