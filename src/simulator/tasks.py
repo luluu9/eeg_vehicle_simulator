@@ -104,13 +104,11 @@ class GoalChecker:
 
     @staticmethod
     def optimal_time(goal: Goal) -> float:
-        from .evaluation import T_CYCLE, FORWARD_DISPLACEMENT, ROTATION_DISPLACEMENT
+        from .controller import DEFAULT_CRUISE_SPEED, NOMINAL_TURN_RATE
         if goal.goal_type == GoalType.MOVE_FORWARD:
-            steps = math.ceil(goal.target_value / FORWARD_DISPLACEMENT)
-            return steps * T_CYCLE
+            return goal.target_value / DEFAULT_CRUISE_SPEED
         if goal.goal_type in (GoalType.TURN_LEFT, GoalType.TURN_RIGHT):
-            steps = math.ceil(goal.target_value / math.degrees(ROTATION_DISPLACEMENT))
-            return steps * T_CYCLE
+            return math.radians(goal.target_value) / NOMINAL_TURN_RATE
         if goal.goal_type == GoalType.REST:
             return goal.target_value
         return goal.timeout
@@ -216,9 +214,10 @@ class TrajectoryTask:
 
     @property
     def optimal_time(self) -> float:
-        from .evaluation import T_CYCLE
-        steps_needed = len(self.waypoints) - 1
-        return steps_needed * T_CYCLE
+        from .controller import DEFAULT_CRUISE_SPEED
+        if DEFAULT_CRUISE_SPEED <= 0:
+            return self.TIME_LIMIT
+        return self.total_path_length / DEFAULT_CRUISE_SPEED
 
     def reset(self):
         self.current_idx = 0

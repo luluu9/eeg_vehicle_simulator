@@ -1,3 +1,4 @@
+import math
 import time
 from collections import deque
 
@@ -14,6 +15,8 @@ DEFAULT_BRAKE_SECONDS = 0.3
 DEFAULT_FPS = 50
 DEFAULT_ERRP_THRESHOLD = 0.5
 DEFAULT_ERRP_ACTION_DELAY = 0.0
+DEFAULT_CRUISE_SPEED = 4.0
+NOMINAL_TURN_RATE = math.radians(21.0)
 
 CONTINUOUS_ACTION_MAP = {
     StudyClass.REST.value: np.array([0.0, 0.0, 0.0], dtype=np.float32),
@@ -43,10 +46,12 @@ class MovementController:
                  errp_action_delay: float = DEFAULT_ERRP_ACTION_DELAY,
                  history_seconds: float = DEFAULT_HISTORY_SECONDS,
                  brake_seconds: float = DEFAULT_BRAKE_SECONDS,
+                 cruise_speed: float = DEFAULT_CRUISE_SPEED,
                  fps: int = DEFAULT_FPS, clock=time.monotonic):
         self.strategy_name = strategy_name
         self.errp_threshold = errp_threshold
         self.errp_action_delay = errp_action_delay
+        self.cruise_speed = cruise_speed
         self.history = deque(maxlen=max(1, int(round(history_seconds * fps))))
         self._brake_total = max(1, int(round(brake_seconds * fps)))
         self._brake_frames = 0
@@ -62,7 +67,8 @@ class MovementController:
     def is_reversing(self) -> bool:
         return self.state == self.REVERSING
 
-    def step(self, dominant_class: int, errp_prob: float = 0.0) -> np.ndarray:
+    def step(self, dominant_class: int, errp_prob: float = 0.0,
+             speed: float = 0.0) -> np.ndarray:
         now = self._clock()
 
         if self.state == self.REVERSING:
@@ -101,5 +107,7 @@ class MovementController:
 
         self._last_class = dominant_class
         action = continuous_action(dominant_class)
+        if action[1] > 0.0 and speed >= self.cruise_speed:
+            action[1] = 0.0
         self.history.append(action.copy())
         return action

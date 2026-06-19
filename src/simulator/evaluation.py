@@ -345,7 +345,8 @@ class EvaluationSession:
         if controller.strategy_name == "errp" and errp_prob >= ERRP_THRESHOLD and not controller.is_reversing:
             self.metrics.record_correction()
 
-        action = controller.step(dominant, errp_prob)
+        speed = get_wheelchair_state(env).speed
+        action = controller.step(dominant, errp_prob, speed=speed)
         env.step(action)
         if overlay_fn:
             overlay_fn()

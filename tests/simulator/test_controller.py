@@ -173,3 +173,21 @@ class TestBrakingOnDirectionChange:
         a = c.step(StudyClass.FORWARD.value)
         assert a[2] == 0.0 and a[1] == SLOW_GAS
 
+
+class TestCruiseGovernor:
+    def test_gas_applied_below_cruise(self):
+        c = MovementController(strategy_name="baseline", cruise_speed=4.0)
+        a = c.step(StudyClass.FORWARD.value, speed=1.0)
+        assert a[1] == SLOW_GAS
+
+    def test_gas_cut_at_cruise(self):
+        c = MovementController(strategy_name="baseline", cruise_speed=4.0)
+        a = c.step(StudyClass.FORWARD.value, speed=4.0)
+        assert a[1] == 0.0
+
+    def test_steer_unaffected_by_speed(self):
+        c = MovementController(strategy_name="baseline", cruise_speed=4.0)
+        a = c.step(StudyClass.LEFT.value, speed=10.0)
+        assert a[0] == -SLOW_STEER
+
+

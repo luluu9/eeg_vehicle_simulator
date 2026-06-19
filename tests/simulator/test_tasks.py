@@ -92,6 +92,23 @@ class TestOptimalPathLength:
         assert length > 0
 
 
+class TestOptimalTime:
+    def test_forward(self):
+        from src.simulator.controller import DEFAULT_CRUISE_SPEED
+        goal = Goal(GoalType.MOVE_FORWARD, 20, 60)
+        assert GoalChecker.optimal_time(goal) == pytest.approx(20 / DEFAULT_CRUISE_SPEED)
+
+    def test_turn(self):
+        from src.simulator.controller import NOMINAL_TURN_RATE
+        goal = Goal(GoalType.TURN_LEFT, 90, 60)
+        assert GoalChecker.optimal_time(goal) == pytest.approx(math.radians(90) / NOMINAL_TURN_RATE)
+
+    def test_rest(self):
+        goal = Goal(GoalType.REST, 15, 60)
+        assert GoalChecker.optimal_time(goal) == 15
+
+
+
 class TestTaskAGoals:
     def test_has_four_goals(self):
         assert len(TASK_A_GOALS) == 4
