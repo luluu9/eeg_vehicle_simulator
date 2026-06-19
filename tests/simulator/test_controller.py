@@ -1,7 +1,8 @@
 import numpy as np
 
 from src.simulator.controller import (
-    MovementController, continuous_action, inverse_action, SLOW_GAS, SLOW_STEER,
+    MovementController, continuous_action, inverse_action,
+    SLOW_GAS, SLOW_STEER, BRAKE_STRENGTH,
 )
 from src.common.constants import StudyClass
 
@@ -131,3 +132,44 @@ class TestErrpReversal:
         c.step(StudyClass.REST.value, errp_prob=0.9)
         snapshot_len = len(c._pending_snapshot)
         assert snapshot_len == 5
+
+
+class TestBrakingOnDirectionChange:
+    def test_no_brake_on_initial_move(self):
+        c = MovementController(strategy_name="baseline")
+        a = c.step(StudyClass.FORWARD.value)
+        assert a[2] == 0.0 and a[1] == SLOW_GAS
+
+    def test_brake_when_changing_direction(self):
+        c = MovementController(strategy_name="baseline", brake_seconds=0.1, fps=50)
+        c.step(StudyClass.FORWARD.value)
+        a = c.step(StudyClass.LEFT.value)
+        assert a[2] == BRAKE_STRENGTH
+        assert a[0] == 0.0 and a[1] == 0.0
+
+    def test_brake_lasts_configured_frames(self):
+        c = MovementController(strategy_name="baseline", brake_seconds=0.1, fps=50)
+        c.step(StudyClass.FORWARD.value)
+        brake_steps = 0
+        for _ in range(10):
+            a = c.step(StudyClass.LEFT.value)
+            if a[2] == BRAKE_STRENGTH:
+                brake_steps += 1
+            else:
+                break
+        assert brake_steps == 5
+
+    def test_resumes_new_direction_after_brake(self):
+        c = MovementController(strategy_name="baseline", brake_seconds=0.1, fps=50)
+        c.step(StudyClass.FORWARD.value)
+        last = None
+        for _ in range(10):
+            last = c.step(StudyClass.LEFT.value)
+        assert last[0] == -SLOW_STEER
+
+    def test_no_brake_when_returning_to_rest_then_move(self):
+        c = MovementController(strategy_name="baseline", brake_seconds=0.1, fps=50)
+        c.step(StudyClass.REST.value)
+        a = c.step(StudyClass.FORWARD.value)
+        assert a[2] == 0.0 and a[1] == SLOW_GAS
+
