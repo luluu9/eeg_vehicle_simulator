@@ -98,3 +98,7 @@ class MultiStreamMonitor:
     def get_errp(self):
         with self.lock:
             return {k: v[0].copy() for k, v in self.errp_data.items()}
+
+    def get_errp_with_ts(self):
+        with self.lock:
+            return {k: (v[0].copy(), v[1]) for k, v in self.errp_data.items()}

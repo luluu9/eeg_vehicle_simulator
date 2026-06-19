@@ -8,6 +8,7 @@ from pylsl import StreamInfo, StreamOutlet
 
 from .input_handler import MultiStreamMonitor
 from .strategies import STUDY_STRATEGIES, REST_ACTION
+from .controller import MovementController
 from ..common.constants import StudyClass, ErrPConfig
 from .metrics import MetricsCollector
 from .tasks import (
@@ -25,6 +26,7 @@ T_CYCLE = 1.0  # seconds per command cycle
 FORWARD_DISPLACEMENT = WHEELCHAIR_LENGTH  # Box2D units per forward command (= 1 real meter)
 ROTATION_DISPLACEMENT = math.radians(15)  # radians per rotation command
 ERRP_THRESHOLD = 0.50  # probability threshold for ErrP error detection
+ERRP_ACTION_DELAY = 0.0  # seconds to wait before reacting to an ErrP (tune experimentally)
 STEPS_PER_CYCLE = int(T_CYCLE * PHYSICS_FPS)  # physics steps per animation
 
 # ── Feedback Marker Outlet ────────────────────────────────────────────────────
@@ -301,6 +303,8 @@ class EvaluationSession:
         self.subject_id = subject_id
         self.metrics = MetricsCollector()
         self.monitor = MultiStreamMonitor()
+        self._last_errp_ts: dict = {}
+        self._last_dominant = StudyClass.REST.value
 
     def run(self, env=None, screen=None) -> dict:
         _patch_pygame_flip()
@@ -332,59 +336,93 @@ class EvaluationSession:
         })
         return result
 
+    def _make_controller(self) -> MovementController:
+        strategy = "errp" if self.strategy_name != "baseline" else "baseline"
+        return MovementController(
+            strategy_name=strategy,
+            errp_threshold=ERRP_THRESHOLD,
+            errp_action_delay=ERRP_ACTION_DELAY,
+            fps=PHYSICS_FPS,
+        )
+
+    def _fresh_errp_prob(self) -> float:
+        data = self._pick_errp_with_ts(self.monitor.get_errp_with_ts())
+        prob = 0.0
+        for name, (probs, ts) in data.items():
+            if ts != self._last_errp_ts.get(name):
+                self._last_errp_ts[name] = ts
+                if len(probs) >= 2:
+                    prob = float(probs[1])
+        return prob
+
+    def _control_step(self, env, controller: MovementController, clock, overlay_fn=None):
+        """Advance one physics frame. Returns (dominant, probs, errp_prob) or None if aborted."""
+        if not self._handle_events():
+            return None
+
+        mi_probs = self.monitor.get_probabilities()
+        stream = self._pick_stream(mi_probs)
+        probs = mi_probs[stream][:4] if stream and stream in mi_probs else np.array([1.0, 0, 0, 0])
+        dominant = int(np.argmax(probs))
+        errp_prob = self._fresh_errp_prob()
+
+        if not controller.is_reversing and dominant != self._last_dominant:
+            if dominant != StudyClass.REST.value:
+                _get_marker_outlet().push_sample([ErrPConfig.MOVEMENT_ONSET_MARKER])
+            self._last_dominant = dominant
+
+        if controller.strategy_name == "errp" and errp_prob >= ERRP_THRESHOLD and not controller.is_reversing:
+            self.metrics.record_correction()
+
+        action = controller.step(dominant, errp_prob)
+        env.step(action)
+        if overlay_fn:
+            overlay_fn()
+        _flip()
+        clock.tick(PHYSICS_FPS)
+        return dominant, probs, errp_prob
+
     def _run_task_a(self, env, strategy, screen):
         goals = list(TASK_A_GOALS)
         random.shuffle(goals)
+        clock = pygame.time.Clock()
+        dt = 1.0 / PHYSICS_FPS
 
         for i, goal in enumerate(goals):
             env.reset()
             start_state = get_wheelchair_state(env)
             if not self._goal_countdown(env, screen, goal, i, start_state):
                 return
+            controller = self._make_controller()
+            self._last_dominant = StudyClass.REST.value
             self.metrics.start_trial()
             elapsed = 0.0
             rest_accumulated = 0.0
             completed = False
+            last_recorded = None
+            state = start_state
+            check_elapsed = 0.0
 
             while True:
-                if not self._handle_events():
-                    return
-
-                mi_probs = self.monitor.get_probabilities()
-                stream = self._pick_stream(mi_probs)
-                probs = mi_probs[stream][:4] if stream and stream in mi_probs else np.array([1.0, 0, 0, 0])
-                command_class = int(np.argmax(probs))
-
-                abort = self._animate_command(
-                    env, screen, command_class,
+                result = self._control_step(
+                    env, controller, clock,
                     overlay_fn=lambda: self._render_goal_cue(screen, goal, i, elapsed, start_state, get_wheelchair_state(env), rest_accumulated),
                 )
-                if abort:
+                if result is None:
                     return
-                elapsed += T_CYCLE
-
-                if command_class == StudyClass.REST.value:
-                    rest_accumulated += T_CYCLE
-
-                # Read ErrP AFTER animation (signal window [-0.2, 0.8]s now complete)
-                errp_data = self._pick_errp(self.monitor.get_errp())
-                errp_prob = _get_errp_prob(errp_data)
-
-                # ErrP handling
-                correction = self._apply_errp(env, screen, errp_prob, command_class, probs,
-                    overlay_fn=lambda: self._render_goal_cue(screen, goal, i, elapsed, start_state, get_wheelchair_state(env), rest_accumulated),
-                )
-                if correction is None:
-                    return  # abort
-                if correction:
-                    elapsed += T_CYCLE
+                dominant, probs, errp_prob = result
+                elapsed += dt
+                if dominant == StudyClass.REST.value:
+                    rest_accumulated += dt
 
                 state = get_wheelchair_state(env)
-                self.metrics.record_decision(
-                    state.x, state.y, state.angle,
-                    np.zeros(3), command_class,
-                    errp_error_prob=errp_prob,
-                )
+                if dominant != last_recorded:
+                    self.metrics.record_decision(
+                        state.x, state.y, state.angle,
+                        np.zeros(3), dominant,
+                        errp_error_prob=errp_prob,
+                    )
+                    last_recorded = dominant
 
                 check_elapsed = rest_accumulated if goal.goal_type == GoalType.REST else elapsed
                 if GoalChecker.check(goal, start_state, state, check_elapsed):
@@ -393,8 +431,6 @@ class EvaluationSession:
                 if elapsed >= goal.timeout:
                     break
 
-            state = get_wheelchair_state(env)
-            check_elapsed = rest_accumulated if goal.goal_type == GoalType.REST else elapsed
             goal_completion_pct = GoalChecker.completion_pct(goal, start_state, state, check_elapsed)
             optimal_time = GoalChecker.optimal_time(goal)
             self.metrics.end_trial(
@@ -408,47 +444,34 @@ class EvaluationSession:
         _install_path_renderer(env, trajectory)
         if not self._goal_countdown_simple(env, screen):
             return
+        controller = self._make_controller()
+        self._last_dominant = StudyClass.REST.value
         self.metrics.start_trial()
+        clock = pygame.time.Clock()
+        dt = 1.0 / PHYSICS_FPS
         elapsed = 0.0
+        last_recorded = None
 
         while elapsed < trajectory.TIME_LIMIT and not trajectory.completed:
-            if not self._handle_events():
-                break
-
-            mi_probs = self.monitor.get_probabilities()
-            stream = self._pick_stream(mi_probs)
-            probs = mi_probs[stream][:4] if stream and stream in mi_probs else np.array([1.0, 0, 0, 0])
-            command_class = int(np.argmax(probs))
-
-            abort = self._animate_command(
-                env, screen, command_class,
+            result = self._control_step(
+                env, controller, clock,
                 overlay_fn=lambda: self._render_trajectory_overlay(screen, trajectory, elapsed),
             )
-            if abort:
+            if result is None:
                 break
-            elapsed += T_CYCLE
-
-            # Read ErrP AFTER animation (signal window [-0.2, 0.8]s now complete)
-            errp_data = self._pick_errp(self.monitor.get_errp())
-            errp_prob = _get_errp_prob(errp_data)
-
-            # ErrP handling
-            correction = self._apply_errp(env, screen, errp_prob, command_class, probs,
-                overlay_fn=lambda: self._render_trajectory_overlay(screen, trajectory, elapsed),
-            )
-            if correction is None:
-                break  # abort
-            if correction:
-                elapsed += T_CYCLE
+            dominant, probs, errp_prob = result
+            elapsed += dt
 
             state = get_wheelchair_state(env)
             on_road = trajectory.is_on_road(state.x, state.y)
-            self.metrics.record_decision(
-                state.x, state.y, state.angle,
-                np.zeros(3), command_class,
-                errp_error_prob=errp_prob,
-                on_road=on_road,
-            )
+            if dominant != last_recorded:
+                self.metrics.record_decision(
+                    state.x, state.y, state.angle,
+                    np.zeros(3), dominant,
+                    errp_error_prob=errp_prob,
+                    on_road=on_road,
+                )
+                last_recorded = dominant
 
             trajectory.check_waypoint(state.x, state.y)
             trajectory.arc_length_progress(state.x, state.y)
@@ -459,67 +482,6 @@ class EvaluationSession:
 
         if trajectory.completed:
             self._show_goal_reached(env, screen)
-
-    def _animate_command(self, env, screen, command_class: int, overlay_fn=None) -> bool:
-        """Execute a command via physics for T_CYCLE seconds. Returns True if user aborted."""
-        action = study_action(command_class)
-        _get_marker_outlet().push_sample([ErrPConfig.MOVEMENT_ONSET_MARKER])
-
-        brake_steps = STEPS_PER_CYCLE // 5
-        move_steps = STEPS_PER_CYCLE - brake_steps
-
-        for step in range(move_steps):
-            if not self._handle_events():
-                return True
-            env.step(action)
-            if overlay_fn:
-                overlay_fn()
-            _flip()
-        # Gradual deceleration (rendered) in remaining steps
-        for step in range(brake_steps):
-            if not self._handle_events():
-                return True
-            env.step(REST_ACTION.copy())
-            if overlay_fn:
-                overlay_fn()
-            _flip()
-        return False
-
-    def _apply_errp(self, env, screen, errp_prob: float, command_class: int, probs: np.ndarray, overlay_fn=None):
-        """Check ErrP and handle correction. Returns: True=corrected, False=no error, None=abort."""
-        if self.strategy_name == "baseline" or errp_prob < ERRP_THRESHOLD:
-            return False
-
-        self.metrics.record_correction()
-
-        # Animate reverse movement (MI commands paused during reversal)
-        reverse = _reverse_action(command_class)
-        brake_steps = STEPS_PER_CYCLE // 5
-        move_steps = STEPS_PER_CYCLE - brake_steps
-
-        for _ in range(move_steps):
-            if not self._handle_events():
-                return None
-            env.step(reverse)
-            if overlay_fn:
-                overlay_fn()
-            _flip()
-        # Gradual deceleration (rendered)
-        for _ in range(brake_steps):
-            if not self._handle_events():
-                return None
-            env.step(REST_ACTION.copy())
-            if overlay_fn:
-                overlay_fn()
-            _flip()
-
-        if self.strategy_name == "autocorrect":
-            sorted_idx = np.argsort(probs)[::-1]
-            second_best = int(sorted_idx[1])
-            abort = self._animate_command(env, screen, second_best, overlay_fn=overlay_fn)
-            if abort:
-                return None
-        return True
 
     @staticmethod
     def _show_goal_reached(env, screen):
@@ -545,6 +507,11 @@ class EvaluationSession:
         if self.errp_channel and self.errp_channel in errp_data:
             return {self.errp_channel: errp_data[self.errp_channel]}
         return {}
+
+    def _pick_errp_with_ts(self, errp_data: dict) -> dict:
+        if self.errp_channel and self.errp_channel in errp_data:
+            return {self.errp_channel: errp_data[self.errp_channel]}
+        return errp_data
 
     @staticmethod
     def _goal_countdown(env, screen, goal, trial_idx: int, start_state) -> bool:
