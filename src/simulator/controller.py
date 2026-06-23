@@ -17,6 +17,7 @@ DEFAULT_ERRP_THRESHOLD = 0.5
 DEFAULT_ERRP_ACTION_DELAY = 0.0
 DEFAULT_CRUISE_SPEED = 4.0
 NOMINAL_TURN_RATE = math.radians(21.0)
+STOP_SPEED_EPS = 0.1
 
 CONTINUOUS_ACTION_MAP = {
     StudyClass.REST.value: np.array([0.0, 0.0, 0.0], dtype=np.float32),
@@ -38,7 +39,9 @@ def inverse_action(action: np.ndarray) -> np.ndarray:
 
 class MovementController:
     NORMAL = "NORMAL"
+    ERRP_STOPPING = "ERRP_STOPPING"
     REVERSING = "REVERSING"
+    COOLDOWN = "COOLDOWN"
     BRAKING = "BRAKING"
 
     def __init__(self, strategy_name: str = "baseline",
@@ -59,37 +62,43 @@ class MovementController:
         self._clock = clock
         self.state = self.NORMAL
         self._reverse_queue: list[np.ndarray] = []
-        self._pending_snapshot: list[np.ndarray] | None = None
-        self._pending_time = 0.0
+        self._cooldown_until = 0.0
         self.correction_count = 0
 
     @property
     def is_reversing(self) -> bool:
         return self.state == self.REVERSING
 
+    @property
+    def is_correcting(self) -> bool:
+        return self.state in (self.ERRP_STOPPING, self.REVERSING, self.COOLDOWN)
+
     def step(self, dominant_class: int, errp_prob: float = 0.0,
              speed: float = 0.0) -> np.ndarray:
         now = self._clock()
 
+        if (self.strategy_name == "errp" and not self.is_correcting
+                and errp_prob >= self.errp_threshold):
+            self._reverse_queue = list(self.history)
+            self.history.clear()
+            self._last_class = StudyClass.REST.value
+            self.correction_count += 1
+            self.state = self.ERRP_STOPPING
+
+        if self.state == self.ERRP_STOPPING:
+            if speed > STOP_SPEED_EPS:
+                return BRAKE_ACTION.copy()
+            self.state = self.REVERSING
+
         if self.state == self.REVERSING:
             if self._reverse_queue:
                 return inverse_action(self._reverse_queue.pop())
-            self.state = self.NORMAL
-            self._pending_snapshot = None
+            self._cooldown_until = now + self.errp_action_delay
+            self.state = self.COOLDOWN
 
-        if (self.strategy_name == "errp" and self._pending_snapshot is None
-                and errp_prob >= self.errp_threshold):
-            self._pending_snapshot = list(self.history)
-            self._pending_time = now + self.errp_action_delay
-            self.correction_count += 1
-
-        if self._pending_snapshot is not None and now >= self._pending_time:
-            self._reverse_queue = self._pending_snapshot
-            self._pending_snapshot = None
-            self.history.clear()
-            self.state = self.REVERSING
-            if self._reverse_queue:
-                return inverse_action(self._reverse_queue.pop())
+        if self.state == self.COOLDOWN:
+            if now < self._cooldown_until:
+                return REST_ACTION.copy()
             self.state = self.NORMAL
 
         if self.state == self.BRAKING:

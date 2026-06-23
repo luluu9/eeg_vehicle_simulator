@@ -337,12 +337,12 @@ class EvaluationSession:
         dominant = int(np.argmax(probs))
         errp_prob = self._fresh_errp_prob()
 
-        if not controller.is_reversing and dominant != self._last_dominant:
+        if not controller.is_correcting and dominant != self._last_dominant:
             if dominant != StudyClass.REST.value:
                 _get_marker_outlet().push_sample([ErrPConfig.MOVEMENT_ONSET_MARKER])
             self._last_dominant = dominant
 
-        if controller.strategy_name == "errp" and errp_prob >= ERRP_THRESHOLD and not controller.is_reversing:
+        if controller.strategy_name == "errp" and errp_prob >= ERRP_THRESHOLD and not controller.is_correcting:
             self.metrics.record_correction()
 
         speed = get_wheelchair_state(env).speed

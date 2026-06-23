@@ -108,30 +108,44 @@ class TestErrpReversal:
         assert c.correction_count == 1
         assert c.is_reversing
 
-    def test_action_delay_postpones_reversal(self):
+    def test_brakes_to_stop_before_reversing(self):
         clock = FakeClock()
-        c = MovementController(strategy_name="errp", errp_action_delay=0.1,
-                               history_seconds=0.2, fps=50, clock=clock)
-        for _ in range(10):
+        c = MovementController(strategy_name="errp", errp_action_delay=0.0,
+                               history_seconds=0.1, fps=50, clock=clock)
+        for _ in range(5):
             c.step(StudyClass.FORWARD.value)
-        c.step(StudyClass.REST.value, errp_prob=0.9)
+        a = c.step(StudyClass.REST.value, errp_prob=0.9, speed=10.0)
+        assert a[2] == BRAKE_STRENGTH
         assert not c.is_reversing
-        clock.t = 0.05
-        c.step(StudyClass.FORWARD.value)
-        assert not c.is_reversing
-        clock.t = 0.11
-        c.step(StudyClass.FORWARD.value)
+        a = c.step(StudyClass.REST.value, speed=0.0)
         assert c.is_reversing
+        assert a[1] < 0
 
-    def test_snapshot_taken_at_detection_not_after_delay(self):
+    def test_reverse_starts_immediately_on_detection(self):
         clock = FakeClock()
         c = MovementController(strategy_name="errp", errp_action_delay=0.1,
                                history_seconds=1.0, fps=50, clock=clock)
         for _ in range(5):
             c.step(StudyClass.FORWARD.value)
+        a = c.step(StudyClass.REST.value, errp_prob=0.9)
+        assert c.is_reversing
+        assert a[1] < 0
+        assert c.correction_count == 1
+
+    def test_action_delay_postpones_resume_after_reversal(self):
+        clock = FakeClock()
+        c = MovementController(strategy_name="errp", errp_action_delay=0.1,
+                               history_seconds=0.04, fps=50, clock=clock)
+        for _ in range(2):
+            c.step(StudyClass.FORWARD.value)
         c.step(StudyClass.REST.value, errp_prob=0.9)
-        snapshot_len = len(c._pending_snapshot)
-        assert snapshot_len == 5
+        while c.is_reversing:
+            c.step(StudyClass.REST.value)
+        a = c.step(StudyClass.FORWARD.value)
+        np.testing.assert_array_equal(a, [0, 0, 0])
+        clock.t = 0.11
+        a = c.step(StudyClass.FORWARD.value)
+        assert a[1] == SLOW_GAS
 
 
 class TestBrakingOnDirectionChange:
