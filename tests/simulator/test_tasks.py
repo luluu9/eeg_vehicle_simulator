@@ -132,6 +132,12 @@ class TestTrajectoryTask:
         task.check_waypoint(0, 5)
         assert task.completed
 
+    def test_finish_line_completes_despite_missed_waypoints(self):
+        wps = [Waypoint(0, 5), Waypoint(0, 10), Waypoint(0, 15)]
+        task = TrajectoryTask(wps, waypoint_radius=2.0)
+        assert task.check_waypoint(0, 15)
+        assert task.completed
+
     def test_progress(self):
         wps = [Waypoint(0, 5), Waypoint(0, 10), Waypoint(0, 15), Waypoint(0, 20)]
         task = TrajectoryTask(wps, waypoint_radius=2.0)

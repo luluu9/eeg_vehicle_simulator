@@ -137,6 +137,10 @@ class TrajectoryTask:
     def check_waypoint(self, x: float, y: float) -> bool:
         if self.current_idx >= len(self.waypoints):
             return False
+        finish = self.waypoints[-1]
+        if math.sqrt((x - finish.x) ** 2 + (y - finish.y) ** 2) <= self.waypoint_radius:
+            self.current_idx = len(self.waypoints)
+            return True
         wp = self.waypoints[self.current_idx]
         dist = math.sqrt((x - wp.x) ** 2 + (y - wp.y) ** 2)
         if dist <= self.waypoint_radius:

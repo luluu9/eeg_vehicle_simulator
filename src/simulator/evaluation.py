@@ -22,7 +22,7 @@ from gymnasium.envs.box2d.wheelchair_racing import (
 )
 
 ERRP_THRESHOLD = 0.50  # probability threshold for ErrP error detection
-ERRP_ACTION_DELAY = 0.0  # seconds to wait before reacting to an ErrP (tune experimentally)
+ERRP_ACTION_DELAY = 2.0  # seconds to wait before reacting to an ErrP
 
 # ── Feedback Marker Outlet ────────────────────────────────────────────────────
 _marker_outlet: StreamOutlet | None = None
