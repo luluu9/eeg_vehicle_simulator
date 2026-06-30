@@ -50,6 +50,13 @@ _GOAL_TO_CLASS = {
     GoalType.REST: StudyClass.REST.value,
 }
 
+_GOAL_LABELS = {
+    GoalType.TURN_LEFT: "Turn left",
+    GoalType.TURN_RIGHT: "Turn right",
+    GoalType.MOVE_FORWARD: "Move forward",
+    GoalType.REST: "Rest",
+}
+
 def _patch_pygame_flip():
     global pygame_flip_original
     if pygame is not None and pygame_flip_original is None:
@@ -233,6 +240,10 @@ def _draw_top_bar(screen: pygame.Surface, text: str):
     bar.fill(_BAR_COLOR)
     screen.blit(bar, (0, 0))
     screen.blit(rendered, (sw // 2 - rendered.get_width() // 2, 10))
+
+
+def _goal_prompt_text(goal) -> str:
+    return f"Upcoming task: {_GOAL_LABELS[goal.goal_type]}    Press SPACE to begin"
 
 
 def _draw_countdown_digit(screen: pygame.Surface, digit: int):
@@ -482,6 +493,28 @@ class EvaluationSession:
 
     @staticmethod
     def _goal_countdown(env, screen, goal, trial_idx: int, start_state) -> bool:
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return False
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    return False
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                    waiting = False
+
+            env.step(REST_ACTION.copy())
+            state = get_wheelchair_state(env)
+            if goal.goal_type in (GoalType.TURN_LEFT, GoalType.TURN_RIGHT):
+                _draw_compass_arrow(screen, goal, start_state, state)
+            elif goal.goal_type == GoalType.REST:
+                _draw_rest_circle(screen, 0.0, goal.target_value)
+            elif goal.goal_type == GoalType.MOVE_FORWARD:
+                _draw_forward_line(screen, goal, start_state, state)
+            _draw_top_bar(screen, _goal_prompt_text(goal))
+            _flip()
+            pygame.time.wait(16)
+
         for count in range(_COUNTDOWN_FROM, 0, -1):
             deadline = time.monotonic() + 1.0
             while time.monotonic() < deadline:
