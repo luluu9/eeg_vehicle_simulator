@@ -16,6 +16,12 @@ class Decision:
 
 
 @dataclass
+class CorrectionEvent:
+    timestamp: float
+    errp_error_prob: float
+
+
+@dataclass
 class TrialResult:
     goal_type: str
     completed: bool
@@ -26,6 +32,7 @@ class TrialResult:
     expected_class: int | None = None
     road_adherence: float | None = None
     decisions: list[Decision] = field(default_factory=list)
+    corrections: list[CorrectionEvent] = field(default_factory=list)
 
     @property
     def normalized_time(self) -> float | None:
@@ -48,12 +55,14 @@ class MetricsCollector:
         self._correction_count: int = 0
         self._trials: list[TrialResult] = []
         self._decisions: list[Decision] = []
+        self._corrections: list[CorrectionEvent] = []
         self._on_road_steps: int = 0
         self._total_steps: int = 0
 
     def start_trial(self):
         self._positions.clear()
         self._decisions.clear()
+        self._corrections.clear()
         self._start_time = time.monotonic()
         self._correction_count = 0
         self._on_road_steps = 0
@@ -78,8 +87,12 @@ class MetricsCollector:
             if on_road:
                 self._on_road_steps += 1
 
-    def record_correction(self):
+    def record_correction(self, errp_error_prob: float = 0.0):
         self._correction_count += 1
+        self._corrections.append(CorrectionEvent(
+            timestamp=time.monotonic() - self._start_time,
+            errp_error_prob=errp_error_prob,
+        ))
 
     def end_trial(self, goal_type: str, completed: bool,
                   goal_completion_pct: float, optimal_time: float,
@@ -99,6 +112,7 @@ class MetricsCollector:
             expected_class=expected_class,
             road_adherence=road_adherence,
             decisions=list(self._decisions),
+            corrections=list(self._corrections),
         )
         self._trials.append(result)
         return result
@@ -144,6 +158,13 @@ class MetricsCollector:
                     "optimal_time": t.optimal_time,
                     "correction_count": t.correction_count,
                     "road_adherence": t.road_adherence,
+                    "corrections": [
+                        {
+                            "timestamp": c.timestamp,
+                            "errp_error_prob": c.errp_error_prob,
+                        }
+                        for c in t.corrections
+                    ],
                     "decisions": [
                         {
                             "timestamp": d.timestamp,

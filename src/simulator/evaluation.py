@@ -354,7 +354,7 @@ class EvaluationSession:
             self._last_dominant = dominant
 
         if controller.strategy_name == "errp" and errp_prob >= ERRP_THRESHOLD and not controller.is_correcting:
-            self.metrics.record_correction()
+            self.metrics.record_correction(errp_prob)
 
         speed = get_wheelchair_state(env).speed
         action = controller.step(dominant, errp_prob, speed=speed)

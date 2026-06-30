@@ -2,7 +2,7 @@ import math
 import time
 import numpy as np
 import pytest
-from src.simulator.metrics import MetricsCollector, TrialResult, Decision
+from src.simulator.metrics import MetricsCollector, TrialResult, Decision, CorrectionEvent
 
 
 class TestDecision:
@@ -61,6 +61,17 @@ class TestTrialResult:
         r = TrialResult("move", True, 1.0, 5.0, 5.0, 0)
         assert r.decisions == []
 
+    def test_corrections_default_empty(self):
+        r = TrialResult("move", True, 1.0, 5.0, 5.0, 0)
+        assert r.corrections == []
+
+
+class TestCorrectionEvent:
+    def test_fields_stored(self):
+        event = CorrectionEvent(timestamp=1.25, errp_error_prob=0.9)
+        assert event.timestamp == 1.25
+        assert event.errp_error_prob == 0.9
+
 
 class TestMetricsCollector:
     def test_correction_count(self):
@@ -71,6 +82,19 @@ class TestMetricsCollector:
         mc.record_correction()
         result = mc.end_trial("move", True, 1.0, 5.0)
         assert result.correction_count == 3
+
+    def test_correction_events_recorded(self):
+        mc = MetricsCollector()
+        mc.start_trial()
+        mc.record_correction(0.8)
+        time.sleep(0.01)
+        mc.record_correction(0.9)
+        result = mc.end_trial("move", True, 1.0, 5.0)
+        assert len(result.corrections) == 2
+        assert result.corrections[0].errp_error_prob == 0.8
+        assert result.corrections[1].errp_error_prob == 0.9
+        assert result.corrections[0].timestamp >= 0
+        assert result.corrections[1].timestamp > result.corrections[0].timestamp
 
     def test_trials_accumulate(self):
         mc = MetricsCollector()
@@ -98,6 +122,7 @@ class TestMetricsCollector:
         mc.start_trial()
         result = mc.end_trial("b", True, 1.0, 5.0)
         assert result.correction_count == 0
+        assert result.corrections == []
 
     def test_start_trial_resets_decisions(self):
         mc = MetricsCollector()
@@ -306,6 +331,20 @@ class TestSummary:
         mc.end_trial("b", True, 1.0, 5.0)
         s = mc.summary()
         assert s["total_corrections"] == 3
+
+    def test_summary_includes_correction_events(self):
+        mc = MetricsCollector()
+        mc.start_trial()
+        mc.record_correction(0.77)
+        summary = mc.end_trial("move", True, 1.0, 5.0)
+        assert summary.corrections[0].errp_error_prob == 0.77
+
+        s = mc.summary()
+        trial = s["trials"][0]
+        assert trial["correction_count"] == 1
+        assert len(trial["corrections"]) == 1
+        assert trial["corrections"][0]["timestamp"] >= 0
+        assert trial["corrections"][0]["errp_error_prob"] == 0.77
 
 
 class TestITR:
